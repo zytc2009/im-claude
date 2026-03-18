@@ -1,0 +1,9 @@
+services:
+  im-claude:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "3000:3000"   # 钉钉 Webhook 回调端口
+    volumes:
+      - ./workspace:/workspace   # Claude Code 工具的工作目录
