@@ -27,12 +27,13 @@
 | 组件 | 文件 | 职责 |
 |------|------|------|
 | `IMAdapter` | `src/adapters/base.adapter.ts` | 平台适配器抽象接口 |
-| `TelegramAdapter` | `src/adapters/telegram.adapter.ts` | Telegram Bot（基于 grammy） |
+| `TelegramAdapter` | `src/adapters/telegram.adapter.ts` | Telegram Bot（基于 grammy），含语音消息处理 |
 | `DingTalkAdapter` | `src/adapters/dingtalk.adapter.ts` | 钉钉企业内部应用机器人 |
 | `ClaudeRunner` | `src/runner/claude.runner.ts` | Agent SDK 封装，含会话续接 |
 | `SessionManager` | `src/runner/session.manager.ts` | 基于 `session_id` 的会话管理 |
 | `PermissionManager` | `src/permissions/permission.manager.ts` | 用户白名单 + 工具权限控制 |
 | `MessageRouter` | `src/router/message.router.ts` | 消息路由、防并发、错误处理 |
+| `TranscriptionService` | `src/services/transcription.service.ts` | 基于 Whisper 的语音转文字服务 |
 
 ### 会话管理
 
@@ -53,7 +54,7 @@ im-claude/
 ├── src/
 │   ├── adapters/
 │   │   ├── base.adapter.ts          # IMAdapter 接口
-│   │   ├── telegram.adapter.ts      # Telegram 适配器
+│   │   ├── telegram.adapter.ts      # Telegram 适配器（含语音消息）
 │   │   └── dingtalk.adapter.ts      # 钉钉适配器
 │   ├── runner/
 │   │   ├── claude.runner.ts         # Claude Agent SDK 封装
@@ -62,6 +63,8 @@ im-claude/
 │   │   └── permission.manager.ts    # 访问控制
 │   ├── router/
 │   │   └── message.router.ts        # 消息路由器
+│   ├── services/
+│   │   └── transcription.service.ts # Whisper 语音转文字
 │   └── index.ts                     # 入口文件
 ├── .env.example                     # 环境变量模板
 ├── Dockerfile
@@ -80,6 +83,10 @@ im-claude/
 - Anthropic API Key（需有 Claude API 访问权限）
 - Telegram Bot Token（可选）
 - 钉钉企业内部应用（可选）
+- [Whisper](https://github.com/openai/whisper)（可选，Telegram 语音消息识别需要）
+  ```bash
+  pip install openai-whisper
+  ```
 
 ### 安装
 
@@ -119,6 +126,10 @@ ALLOWED_TOOLS=Read,Glob,Grep,Write
 
 # Claude Code 工作目录
 WORKING_DIR=/workspace
+
+# Whisper 语音识别模型（tiny/base/small/medium/large，越大越准但越慢）
+# 需要先安装：pip install openai-whisper
+WHISPER_MODEL=base
 ```
 
 ### 开发模式运行
@@ -154,14 +165,38 @@ docker-compose up -d
 
 向 `@userinfobot` 发消息，获取自己的数字 ID，填入 `ALLOWED_USER_IDS`。
 
-### 3. 支持的命令
+### 3. 支持的命令与功能
 
-| 命令 | 说明 |
-|------|------|
-| 直接发消息 | 与 Claude 对话 |
+| 命令/操作 | 说明 |
+|-----------|------|
+| 直接发文字 | 与 Claude 对话 |
+| 发送语音消息 | 自动转文字后发给 Claude（需安装 Whisper） |
 | `/clear` | 清空对话历史，开始新会话 |
 | `/start` | 欢迎消息 |
 | `/help` | 使用说明 |
+
+### 4. 语音消息（Telegram）
+
+Telegram 支持直接发送语音消息，Bot 会自动调用 Whisper 进行语音识别，将识别结果发送给 Claude：
+
+```
+用户发语音 → Whisper 转文字 → 显示识别结果（🎤 文字） → Claude 回复
+```
+
+**前置条件**：需在运行环境中安装 Whisper：
+```bash
+pip install openai-whisper
+```
+
+可通过 `WHISPER_MODEL` 环境变量调整模型大小（越大越准但首次下载慢）：
+
+| 模型 | 大小 | 适用场景 |
+|------|------|---------|
+| `tiny` | ~75MB | 速度优先 |
+| `base` | ~145MB | 默认，均衡 |
+| `small` | ~466MB | 较高精度 |
+| `medium` | ~1.5GB | 高精度 |
+| `large` | ~3GB | 最高精度 |
 
 ---
 
@@ -302,6 +337,7 @@ router.registerAdapter(myim);
 | `axios` | 钉钉 API HTTP 调用 |
 | `dotenv` | 环境变量管理 |
 | `typescript` + `tsx` | TypeScript 运行时 |
+| `openai-whisper`（系统依赖） | 语音消息转文字（Python，需单独安装） |
 
 ---
 

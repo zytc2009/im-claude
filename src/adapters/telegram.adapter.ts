@@ -1,5 +1,7 @@
+import axios from "axios";
 import { Bot, type Context } from "grammy";
 import type { IMAdapter, IncomingMessage, OutgoingMessage, MessageHandler } from "./base.adapter.js";
+import { TranscriptionService } from "../services/transcription.service.js";
 
 /** Telegram 消息单条上限 */
 const TG_MAX_LEN = 4000;
@@ -7,10 +9,16 @@ const TG_MAX_LEN = 4000;
 export class TelegramAdapter implements IMAdapter {
   readonly platform = "telegram" as const;
   private readonly bot: Bot;
+  private readonly token: string;
+  private readonly transcription: TranscriptionService;
   private handler?: MessageHandler;
 
   constructor(token: string) {
+    this.token = token;
     this.bot = new Bot(token);
+    this.transcription = new TranscriptionService(
+      process.env["WHISPER_MODEL"] ?? "base",
+    );
     this.registerHandlers();
   }
 
@@ -43,6 +51,27 @@ export class TelegramAdapter implements IMAdapter {
           "/clear - 清空对话历史，开始新对话\n" +
           "/help - 显示此帮助",
       );
+    });
+
+    // 语音消息
+    this.bot.on("message:voice", async (ctx: Context) => {
+      if (!this.handler || !ctx.message?.voice) return;
+      const statusMsg = await ctx.reply("🎤 正在识别语音...");
+      try {
+        const fileInfo = await ctx.api.getFile(ctx.message.voice.file_id);
+        const fileUrl = `https://api.telegram.org/file/bot${this.token}/${fileInfo.file_path}`;
+        const res = await axios.get<ArrayBuffer>(fileUrl, { responseType: "arraybuffer" });
+        const text = await this.transcription.transcribe(Buffer.from(res.data), "ogg");
+        if (!text) {
+          await ctx.api.editMessageText(ctx.chat!.id, statusMsg.message_id, "⚠️ 语音识别失败，请重试");
+          return;
+        }
+        await ctx.api.editMessageText(ctx.chat!.id, statusMsg.message_id, `🎤 ${text}`);
+        await this.handler(this.toIncoming(ctx, text));
+      } catch (err) {
+        console.error("[Telegram] Voice error:", err);
+        await ctx.api.editMessageText(ctx.chat!.id, statusMsg.message_id, "⚠️ 语音处理失败，请重试").catch(() => {});
+      }
     });
 
     this.bot.catch((err) => {
