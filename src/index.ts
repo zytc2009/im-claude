@@ -72,6 +72,10 @@ async function main() {
     process.exit(1);
   }
 
+  if (!process.env["FAL_KEY"]) {
+    console.warn("⚠️  未配置 FAL_KEY，Clawra 自拍功能将不可用（请在 .env 中添加 FAL_KEY）");
+  }
+
   // ── Clawra 调度器 ─────────────────────────────────────────────────────────
   let scheduler: ClawraScheduler | null = null;
 
