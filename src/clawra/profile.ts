@@ -75,8 +75,8 @@ ${profile.speakingStyle}
 
 生成自拍的 Bash 命令：
 \`\`\`bash
-SKILL_ENV="$HOME/.claude/skills/clawra-selfie/.env"
-[ -f "$SKILL_ENV" ] && export $(grep -v '^#' "$SKILL_ENV" | xargs)
+IM_ENV="$(pwd)/.env"
+[ -f "$IM_ENV" ] && export $(grep -v '^#' "$IM_ENV" | grep 'FAL_KEY' | xargs)
 REFERENCE_IMAGE="${profile.referenceImageUrl}"
 PROMPT="<根据场景填写 prompt>"
 JSON=$(python3 -c "import json,sys; print(json.dumps({'image_url':sys.argv[1],'prompt':sys.argv[2],'num_images':1,'output_format':'jpeg'}))" "$REFERENCE_IMAGE" "$PROMPT")
