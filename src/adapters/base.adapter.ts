@@ -12,6 +12,7 @@ export interface IncomingMessage {
 export interface OutgoingMessage {
   chatId: string;
   text: string;
+  mediaUrl?: string;  // 图片 URL，设置后发送图片而非文字
 }
 
 export type MessageHandler = (msg: IncomingMessage) => Promise<void>;

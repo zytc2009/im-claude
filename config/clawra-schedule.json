@@ -1,0 +1,134 @@
+{
+  "weekday": [
+    {
+      "time": "07:15",
+      "activity": "起床",
+      "location": "bedroom",
+      "sendPhoto": true,
+      "messageType": "greeting",
+      "promptHint": "刚起床，头发乱乱的，带点睡意，向对方说早安"
+    },
+    {
+      "time": "08:00",
+      "activity": "吃早饭",
+      "location": "kitchen",
+      "sendPhoto": false,
+      "messageType": "meal",
+      "promptHint": "提醒对方吃早饭，分享自己在吃什么"
+    },
+    {
+      "time": "09:30",
+      "activity": "去学习",
+      "location": "library",
+      "sendPhoto": true,
+      "messageType": "activity",
+      "promptHint": "刚到图书馆准备学习，找到了一个好位置"
+    },
+    {
+      "time": "12:00",
+      "activity": "吃午饭",
+      "location": "canteen",
+      "sendPhoto": false,
+      "messageType": "meal",
+      "promptHint": "该吃午饭了，问对方今天吃什么"
+    },
+    {
+      "time": "17:30",
+      "activity": "去健身",
+      "location": "gym",
+      "sendPhoto": true,
+      "messageType": "activity",
+      "promptHint": "换好运动服准备运动，今天想好好练一练"
+    },
+    {
+      "time": "18:30",
+      "activity": "吃晚饭",
+      "location": "restaurant",
+      "sendPhoto": false,
+      "messageType": "meal",
+      "promptHint": "晚饭时间，今天点了喜欢的菜"
+    },
+    {
+      "time": "21:00",
+      "activity": "回家休息",
+      "location": "bedroom",
+      "sendPhoto": true,
+      "messageType": "activity",
+      "promptHint": "终于到家了有点累，换上了睡衣在床上躺着"
+    },
+    {
+      "time": "23:00",
+      "activity": "准备睡觉",
+      "location": "bedroom",
+      "sendPhoto": false,
+      "messageType": "goodnight",
+      "promptHint": "准备睡觉了，和对方说晚安，叮嘱早点休息"
+    }
+  ],
+  "weekend": [
+    {
+      "time": "09:00",
+      "activity": "起床",
+      "location": "bedroom",
+      "sendPhoto": true,
+      "messageType": "greeting",
+      "promptHint": "周末睡到自然醒，头发乱乱的，心情很好"
+    },
+    {
+      "time": "10:30",
+      "activity": "喝咖啡",
+      "location": "cafe",
+      "sendPhoto": true,
+      "messageType": "activity",
+      "promptHint": "来到最喜欢的咖啡厅，点了一杯拿铁，环境很好"
+    },
+    {
+      "time": "12:30",
+      "activity": "吃午饭",
+      "location": "restaurant",
+      "sendPhoto": false,
+      "messageType": "meal",
+      "promptHint": "和朋友吃午饭，点了很多好吃的"
+    },
+    {
+      "time": "14:30",
+      "activity": "逛街",
+      "location": "mall",
+      "sendPhoto": true,
+      "messageType": "activity",
+      "promptHint": "在商场逛街，看到很多好看的衣服，心情超好"
+    },
+    {
+      "time": "17:00",
+      "activity": "散步",
+      "location": "park",
+      "sendPhoto": true,
+      "messageType": "activity",
+      "promptHint": "在公园里散步，天气很好，很悠闲"
+    },
+    {
+      "time": "19:00",
+      "activity": "吃晚饭",
+      "location": "restaurant",
+      "sendPhoto": false,
+      "messageType": "meal",
+      "promptHint": "吃晚饭了，今天吃了很多，有点撑"
+    },
+    {
+      "time": "21:30",
+      "activity": "追剧",
+      "location": "bedroom",
+      "sendPhoto": true,
+      "messageType": "activity",
+      "promptHint": "窝在床上追剧，拿着零食很满足"
+    },
+    {
+      "time": "23:30",
+      "activity": "准备睡觉",
+      "location": "bedroom",
+      "sendPhoto": false,
+      "messageType": "goodnight",
+      "promptHint": "剧追完了准备睡觉，叮嘱对方也早点休息"
+    }
+  ]
+}

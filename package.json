@@ -13,11 +13,13 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.77",
+    "@anthropic-ai/sdk": "^0.36.0",
     "axios": "^1.7.0",
+    "cron": "^3.1.7",
     "dotenv": "^16.4.0",
     "grammy": "^1.31.0",
     "hono": "^4.6.0",
-    "zod": "^3.23.0"
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

@@ -94,11 +94,15 @@ export class TelegramAdapter implements IMAdapter {
   }
 
   async sendMessage(msg: OutgoingMessage): Promise<void> {
+    if (msg.mediaUrl) {
+      await this.bot.api.sendPhoto(msg.chatId, msg.mediaUrl, {
+        caption: msg.text || undefined,
+      });
+      return;
+    }
     const chunks = this.splitText(msg.text);
     for (const chunk of chunks) {
-      await this.bot.api.sendMessage(msg.chatId, chunk, {
-        parse_mode: "Markdown",
-      });
+      await this.bot.api.sendMessage(msg.chatId, chunk);
     }
   }
 

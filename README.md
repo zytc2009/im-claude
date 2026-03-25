@@ -13,13 +13,17 @@
         ↓ 消息
   [IMAdapter 适配器层]          ← 平台无关接口，每个平台独立实现
         ↓
-  [MessageRouter 路由器]        ← 权限校验、防并发、错误处理
+  [MessageRouter 路由器]        ← 权限校验、防并发、图片URL检测
         ↓
-  [ClaudeRunner]                ← 核心：调用 Agent SDK
+  [ClaudeRunner]                ← 核心：调用 Agent SDK，注入 Clawra 人设
         ↓
   @anthropic-ai/claude-agent-sdk  ← 完整 Claude Code 工具链
         ↓
   Claude API (claude-sonnet-4-6)
+
+  [ClawraScheduler]             ← 定时主动推送（独立链路）
+        ├── MessageGenerator    ← claude-haiku 生成口语消息
+        └── PhotoGenerator      ← fal.ai 生成自拍照
 ```
 
 ### 核心组件
@@ -27,13 +31,18 @@
 | 组件 | 文件 | 职责 |
 |------|------|------|
 | `IMAdapter` | `src/adapters/base.adapter.ts` | 平台适配器抽象接口 |
-| `TelegramAdapter` | `src/adapters/telegram.adapter.ts` | Telegram Bot（基于 grammy），含语音消息处理 |
+| `TelegramAdapter` | `src/adapters/telegram.adapter.ts` | Telegram Bot（基于 grammy），含语音消息和图片发送 |
 | `DingTalkAdapter` | `src/adapters/dingtalk.adapter.ts` | 钉钉企业内部应用机器人 |
-| `ClaudeRunner` | `src/runner/claude.runner.ts` | Agent SDK 封装，含会话续接 |
+| `ClaudeRunner` | `src/runner/claude.runner.ts` | Agent SDK 封装，注入 Clawra 人设，含会话续接 |
 | `SessionManager` | `src/runner/session.manager.ts` | 基于 `session_id` 的会话管理 |
 | `PermissionManager` | `src/permissions/permission.manager.ts` | 用户白名单 + 工具权限控制 |
-| `MessageRouter` | `src/router/message.router.ts` | 消息路由、防并发、错误处理 |
+| `MessageRouter` | `src/router/message.router.ts` | 消息路由、防并发、图片 URL 提取并以 sendPhoto 发送 |
 | `TranscriptionService` | `src/services/transcription.service.ts` | 基于 Whisper 的语音转文字服务 |
+| `ClawraScheduler` | `src/clawra/scheduler.ts` | Cron 调度器，管理定时消息和照片推送 |
+| `MessageGenerator` | `src/clawra/message-generator.ts` | 调用 Haiku 生成口语化短消息，含重试和 fallback |
+| `PhotoGenerator` | `src/clawra/photo-generator.ts` | 调用 fal.ai grok-imagine-image/edit 生成自拍照 |
+| `profile.ts` | `src/clawra/profile.ts` | 加载/校验人设 JSON；生成 system prompt |
+| `schedule.ts` | `src/clawra/schedule.ts` | 加载/校验作息 JSON；生成 cron 表达式 |
 
 ### 会话管理
 
@@ -54,18 +63,33 @@ im-claude/
 ├── src/
 │   ├── adapters/
 │   │   ├── base.adapter.ts          # IMAdapter 接口
-│   │   ├── telegram.adapter.ts      # Telegram 适配器（含语音消息）
+│   │   ├── telegram.adapter.ts      # Telegram 适配器（含语音和图片发送）
 │   │   └── dingtalk.adapter.ts      # 钉钉适配器
 │   ├── runner/
-│   │   ├── claude.runner.ts         # Claude Agent SDK 封装
+│   │   ├── claude.runner.ts         # Claude Agent SDK 封装（注入 Clawra 人设）
 │   │   └── session.manager.ts       # 会话状态管理
 │   ├── permissions/
 │   │   └── permission.manager.ts    # 访问控制
 │   ├── router/
-│   │   └── message.router.ts        # 消息路由器
+│   │   └── message.router.ts        # 消息路由器（含图片 URL 提取）
 │   ├── services/
 │   │   └── transcription.service.ts # Whisper 语音转文字
+│   ├── clawra/
+│   │   ├── types.ts                 # 共享类型定义
+│   │   ├── profile.ts               # 人设加载与 system prompt 生成
+│   │   ├── schedule.ts              # 作息加载与 cron 表达式生成
+│   │   ├── message-generator.ts     # Haiku 短消息生成（含 fallback）
+│   │   ├── photo-generator.ts       # fal.ai 自拍照生成
+│   │   └── scheduler.ts             # Cron 调度器
 │   └── index.ts                     # 入口文件
+├── config/
+│   ├── clawra-profile.json          # Clawra 人设配置
+│   └── clawra-schedule.json         # 作息时间表配置
+├── tests/
+│   └── clawra/                      # Clawra 模块单元测试
+├── docs/
+│   ├── DESIGN.md                    # 系统设计文档
+│   └── USAGE.md                     # 使用说明
 ├── .env.example                     # 环境变量模板
 ├── Dockerfile
 ├── docker-compose.yml
@@ -262,43 +286,23 @@ ALLOWED_TOOLS=Read,Glob,Grep,Write,Edit,Bash
 
 
 
-## 测试验证
+## 验证
 
-1.我通过claude安装了这个插件，并提供了他需要的信息：
+### 1. Telegram 基本对话
 
+1. 在 Telegram 搜索你的 Bot 用户名
+2. 发送 `/start`
+3. 发任意消息测试对话
+
+### 2. Clawra 自拍
+
+向 Bot 发：「发张咖啡馆自拍给我」，Bot 会调用 fal.ai 生成图片并通过 `sendPhoto` 发送。
+
+### 3. 运行单元测试
+
+```bash
+npm test
 ```
-  把这三个值发给他：
-  API Key:    sk-ant-...
-  Bot Token:  123456...:AAH...
-  你的TG ID:  数字
-```
-
-2.现在去 Telegram 测试
-
-```
-  1. 搜索你的 Bot 用户名
-  2. 点 Start 或发送 /start
-  3. 直接发一条消息，比如：你好，介绍一下你自己
-```
-
-3.远程控制
-
-```
- 架构是这样的：
-  你的 Telegram 消息
-          ↓ (互联网)
-    Telegram 服务器
-          ↓ (长轮询)
-    你本地运行的 npm run dev
-          ↓
-    Claude Agent SDK（本地进程）
-          ↓
-    claude CLI（本地）
-          ↓ 可以读写
-    D:/AI/claude_code（你的本地文件，取决于你在哪里启动的claude）
-```
-
-然后我让让读取这个目录下的测试文件，他就能帮我返回数据了，太棒了！！
 
 ---
 
@@ -333,8 +337,11 @@ router.registerAdapter(myim);
 | 依赖 | 用途 |
 |------|------|
 | `@anthropic-ai/claude-agent-sdk` | Claude Code Agent SDK，核心 AI 能力 |
+| `@anthropic-ai/sdk` | Anthropic SDK，用于 Clawra 消息生成（Haiku） |
 | `grammy` | Telegram Bot 框架 |
-| `axios` | 钉钉 API HTTP 调用 |
+| `axios` | HTTP 调用（钉钉 API、fal.ai、Telegram 文件下载） |
+| `cron` | Clawra 定时调度 |
+| `zod` | 配置文件 JSON 校验 |
 | `dotenv` | 环境变量管理 |
 | `typescript` + `tsx` | TypeScript 运行时 |
 | `openai-whisper`（系统依赖） | 语音消息转文字（Python，需单独安装） |

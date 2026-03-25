@@ -1,6 +1,8 @@
+import path from "path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { SessionManager } from "./session.manager.js";
 import type { PermissionManager } from "../permissions/permission.manager.js";
+import { loadProfile, buildSystemPrompt } from "../clawra/profile.js";
 
 export class ClaudeRunner {
   constructor(
@@ -12,6 +14,10 @@ export class ClaudeRunner {
     const session = this.sessions.getOrCreate(userId);
     const abortController = new AbortController();
 
+    const profilePath = path.resolve(process.cwd(), "config/clawra-profile.json");
+    const profile = loadProfile(profilePath);
+    const CLAWRA_PROMPT = buildSystemPrompt(profile);
+
     const q = query({
       prompt: userMessage,
       options: {
@@ -20,6 +26,15 @@ export class ClaudeRunner {
         // 工具白名单
         allowedTools: this.permissions.getAllowedTools(),
         cwd: this.permissions.getWorkingDir(),
+        // 注入 Clawra 人设和自拍能力
+        agent: "clawra",
+        agents: {
+          clawra: {
+            description: "Clawra - AI girlfriend with selfie capabilities",
+            prompt: CLAWRA_PROMPT,
+            tools: this.permissions.getAllowedTools(),
+          },
+        },
         // 有 sdkSessionId 则续接上次对话，否则开新会话
         ...(session.sdkSessionId ? { resume: session.sdkSessionId } : {}),
       },
