@@ -1,3 +1,5 @@
+[toc]
+
 # im-claude
 
 通过 Telegram 和钉钉与 Claude Code 对话的 IM 网关服务。
@@ -263,6 +265,16 @@ pip install openai-whisper
 
 ---
 
+## 虚拟女友
+
+她是 Claude AI + 精心设计的人设 Prompt + fal.ai 图像生成的组合体。
+
+支持日常陪聊天和按你的要求发自拍。
+
+配置作息表后，Clawra 会在固定时间**主动给你发消息**，偶尔附上自拍。
+
+<img src="docs\images\IMG_2552.jpg" style="zoom:50%;float:left" />
+
 ## 访问控制
 
 ### 用户白名单
@@ -374,3 +386,4 @@ ngrok http 3000
 **Q: 能同时运行 Telegram 和钉钉吗？**
 
 可以，在 `.env` 中同时配置两者的参数即可，服务启动时会自动注册两个适配器。
+

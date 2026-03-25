@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { ClawraProfile, ScheduleEntry, MessageType } from "./types.js";
-import { buildSystemPrompt } from "./profile.js";
+import { buildTextSystemPrompt } from "./profile.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -83,7 +83,7 @@ export async function generateMessage(
   entry: ScheduleEntry,
   context?: string,
 ): Promise<string> {
-  const systemPrompt = buildSystemPrompt(profile);
+  const systemPrompt = buildTextSystemPrompt(profile);
 
   const userPrompt = [
     `现在是${entry.time}，你正在${entry.location}，${entry.activity}。`,

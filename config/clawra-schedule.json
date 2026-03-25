@@ -33,6 +33,22 @@
       "promptHint": "该吃午饭了，问对方今天吃什么"
     },
     {
+      "time": "14:00",
+      "activity": "带狗狗出去玩",
+      "location": "park",
+      "sendPhoto": true,
+      "messageType": "activity",
+      "promptHint": "带着狗狗出来遛弯，狗狗超级开心，在公园跑来跑去，跟对方分享一下"
+    },
+    {
+      "time": "14:10",
+      "activity": "遛狗回来",
+      "location": "bedroom",
+      "sendPhoto": false,
+      "messageType": "activity",
+      "promptHint": "狗狗玩累了回家了，狗狗现在在睡觉，很可爱"
+    },
+    {
       "time": "17:30",
       "activity": "去健身",
       "location": "gym",

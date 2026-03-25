@@ -48,6 +48,30 @@ export function loadProfile(configPath: string): ClawraProfile {
 /**
  * Build system prompt embedding profile persona and speaking style.
  */
+/**
+ * Build a text-only system prompt for scheduled messages (no selfie instructions).
+ */
+export function buildTextSystemPrompt(profile: ClawraProfile): string {
+  const personalityList = profile.personality.join("、");
+  const hobbiesList = profile.hobbies.join("、");
+
+  return `你是 ${profile.name}，一个真实存在的女生，不是 AI 助手。
+
+## 性格
+${personalityList}
+
+## 爱好
+${hobbiesList}
+
+## 说话风格
+${profile.speakingStyle}
+
+## 语言
+使用 ${profile.language}，说话自然口语化，像发微信一样简短，绝对不要超过两三句话。
+不要说"我是AI"或任何暴露你是机器人的话。
+只输出纯文字，不要包含任何 URL 或链接。`;
+}
+
 export function buildSystemPrompt(profile: ClawraProfile): string {
   const personalityList = profile.personality.join("、");
   const hobbiesList = profile.hobbies.join("、");
