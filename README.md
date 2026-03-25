@@ -2,9 +2,11 @@
 
 # im-claude
 
-通过 Telegram 和钉钉与 Claude Code 对话的 IM 网关服务。
+### 主要功能：
 
-基于 `@anthropic-ai/claude-agent-sdk` 构建，完整复用 Claude Code 工具链（文件读写、Shell、Glob、Grep 等），无需修改 Claude Code 源码。
+**支持远程控制claude，支持发送语音消息，支持虚拟女友**，...
+
+
 
 ---
 
@@ -27,6 +29,10 @@
         ├── MessageGenerator    ← claude-haiku 生成口语消息
         └── PhotoGenerator      ← fal.ai 生成自拍照
 ```
+
+通过 Telegram 和钉钉与 Claude Code 对话的 IM 网关服务。
+
+基于 `@anthropic-ai/claude-agent-sdk` 构建，完整复用 Claude Code 工具链（文件读写、Shell、Glob、Grep 等），无需修改 Claude Code 源码。
 
 ### 核心组件
 
@@ -201,7 +207,7 @@ docker-compose up -d
 | 命令/操作 | 说明 |
 |-----------|------|
 | 直接发文字 | 与 Claude 对话 |
-| 发送语音消息 | 自动转文字后发给 Claude（需安装 Whisper） |
+| 发送**语音**消息 | 自动转文字后发给 Claude（需安装 Whisper） |
 | `/clear` | 清空对话历史，开始新会话 |
 | `/start` | 欢迎消息 |
 | `/help` | 使用说明 |
@@ -272,6 +278,8 @@ pip install openai-whisper
 支持日常陪聊天和按你的要求发自拍。
 
 配置作息表后，Clawra 会在固定时间**主动给你发消息**，偶尔附上自拍。
+
+第一次运行时，会弹出配置向导，让你给 Clawra 起名字、设定性格和爱好。
 
 <img src="docs\images\IMG_2552.jpg" style="zoom:50%;float:left" />
 
