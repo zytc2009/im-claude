@@ -95,7 +95,10 @@ export class TelegramAdapter implements IMAdapter {
 
   async sendMessage(msg: OutgoingMessage): Promise<void> {
     if (msg.mediaUrl) {
-      await this.bot.api.sendPhoto(msg.chatId, msg.mediaUrl, {
+      const response = await axios.get<Buffer>(msg.mediaUrl, { responseType: "arraybuffer" });
+      const buffer = Buffer.from(response.data);
+      const { InputFile } = await import("grammy");
+      await this.bot.api.sendPhoto(msg.chatId, new InputFile(buffer, "photo.jpg"), {
         caption: msg.text || undefined,
       });
       return;
