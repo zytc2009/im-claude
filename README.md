@@ -154,6 +154,11 @@ WORKING_DIR=/workspace
 # Whisper 语音识别模型（tiny/base/small/medium/large，越大越准但越慢）
 # 需要先安装：pip install openai-whisper
 WHISPER_MODEL=base
+
+# Clawra 自拍功能（可选）
+# 需要 fal.ai 账号：https://fal.ai/ 注册后充值（最低 $10），在控制台获取 API Key
+# 未配置时自拍功能不可用，启动时会打印警告
+FAL_KEY=
 ```
 
 ### 开发模式运行
