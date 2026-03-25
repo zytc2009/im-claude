@@ -14,6 +14,7 @@ import { DingTalkAdapter } from "./adapters/dingtalk.adapter.js";
 import { loadProfile } from "./clawra/profile.js";
 import { loadSchedule } from "./clawra/schedule.js";
 import { ClawraScheduler } from "./clawra/scheduler.js";
+import { ensureProfile } from "./clawra/setup.js";
 
 function requireEnv(key: string): string {
   const val = process.env[key];
@@ -22,6 +23,10 @@ function requireEnv(key: string): string {
 }
 
 async function main() {
+  // ── 首次运行：确保 Clawra 人设已配置 ─────────────────────────────────────
+  const profilePath = path.resolve(process.cwd(), "config/clawra-profile.json");
+  await ensureProfile(profilePath);
+
   // ── 公共组件 ──────────────────────────────────────────────────────────────
   const sessions = new SessionManager();
 
@@ -72,7 +77,6 @@ async function main() {
 
   const scheduleEnabled = process.env["CLAWRA_SCHEDULE_ENABLED"] === "true";
   if (scheduleEnabled) {
-    const profilePath = path.resolve(process.cwd(), "config/clawra-profile.json");
     const schedulePath = path.resolve(process.cwd(), "config/clawra-schedule.json");
 
     const profile = loadProfile(profilePath);
