@@ -13,7 +13,7 @@
 ## 架构设计
 
 ```
-用户 (Telegram / 钉钉)
+用户 (Telegram / 钉钉 / 微信)
         ↓ 消息
   [IMAdapter 适配器层]          ← 平台无关接口，每个平台独立实现
         ↓
@@ -41,6 +41,7 @@
 | `IMAdapter` | `src/adapters/base.adapter.ts` | 平台适配器抽象接口 |
 | `TelegramAdapter` | `src/adapters/telegram.adapter.ts` | Telegram Bot（基于 grammy），含语音消息和图片发送 |
 | `DingTalkAdapter` | `src/adapters/dingtalk.adapter.ts` | 钉钉企业内部应用机器人 |
+| `WeChatAdapter` | `src/adapters/wechat.adapter.ts` | 微信个人账号（iLink ClawBot），扫码登录，长轮询收发消息 |
 | `ClaudeRunner` | `src/runner/claude.runner.ts` | Agent SDK 封装，注入 Clawra 人设，含会话续接 |
 | `SessionManager` | `src/runner/session.manager.ts` | 基于 `session_id` 的会话管理 |
 | `PermissionManager` | `src/permissions/permission.manager.ts` | 用户白名单 + 工具权限控制 |
@@ -72,7 +73,8 @@ im-claude/
 │   ├── adapters/
 │   │   ├── base.adapter.ts          # IMAdapter 接口
 │   │   ├── telegram.adapter.ts      # Telegram 适配器（含语音和图片发送）
-│   │   └── dingtalk.adapter.ts      # 钉钉适配器
+│   │   ├── dingtalk.adapter.ts      # 钉钉适配器
+│   │   └── wechat.adapter.ts        # 微信适配器（iLink ClawBot，扫码登录）
 │   ├── runner/
 │   │   ├── claude.runner.ts         # Claude Agent SDK 封装（注入 Clawra 人设）
 │   │   └── session.manager.ts       # 会话状态管理
@@ -237,6 +239,53 @@ pip install openai-whisper
 
 ---
 
+## 微信配置
+
+基于腾讯官方 [iLink ClawBot API](https://github.com/hao-ji-xing/openclaw-weixin/blob/main/weixin-bot-api.md)，支持个人微信账号接入（Public Beta）。
+
+### 1. 启用微信适配器
+
+在 `.env` 中添加：
+
+```env
+WECHAT_ENABLED=true
+```
+
+### 2. 扫码登录
+
+启动后终端会显示二维码（需安装 `qrcode-terminal`，已包含在依赖中）和登录 URL：
+
+```
+[WeChat] 请用微信扫描以下二维码登录：
+[WeChat] https://liteapp.weixin.qq.com/q/7GiQu1?qrcode=xxx
+```
+
+扫码后在手机微信确认登录。Token 自动保存到 `.wechat-token`，**重启后无需重新扫码**。
+
+> Session 中断（手动停止进程）后 Token 会失效，下次启动需重新扫码。
+
+### 3. 获取用户 ID（白名单用）
+
+微信用户 ID 格式为 `xxx@im.wechat`，首次发消息后日志中会打印：
+
+```
+[WeChat] 处理消息: "你好" from=abc123@im.wechat
+```
+
+将该 ID 填入 `ALLOWED_USER_IDS`：
+
+```env
+ALLOWED_USER_IDS=8251974296,abc123@im.wechat
+```
+
+### 4. 注意事项
+
+- iLink ClawBot 目前处于 Public Beta，需要微信 iOS 端体验更完整
+- 图片发送暂时降级为文字（CDN 加密上传需额外实现）
+- 不支持群聊，仅支持私聊
+
+---
+
 ## 钉钉配置
 
 ### 1. 创建企业内部应用机器人
@@ -288,8 +337,8 @@ pip install openai-whisper
 ### 用户白名单
 
 ```env
-# Telegram 用数字 userId，钉钉用 staffId，混用逗号分隔
-ALLOWED_USER_IDS=123456789,user_dingtalk_001
+# Telegram 用数字 userId，钉钉用 staffId，微信用 xxx@im.wechat，混用逗号分隔
+ALLOWED_USER_IDS=123456789,user_dingtalk_001,abc123@im.wechat
 ```
 
 留空表示允许所有人，**仅适合本地开发**。
@@ -368,6 +417,7 @@ router.registerAdapter(myim);
 | `cron` | Clawra 定时调度 |
 | `zod` | 配置文件 JSON 校验 |
 | `dotenv` | 环境变量管理 |
+| `qrcode-terminal` | 微信登录二维码终端展示 |
 | `typescript` + `tsx` | TypeScript 运行时 |
 | `openai-whisper`（系统依赖） | 语音消息转文字（Python，需单独安装） |
 
@@ -394,4 +444,12 @@ ngrok http 3000
 **Q: 能同时运行 Telegram 和钉钉吗？**
 
 可以，在 `.env` 中同时配置两者的参数即可，服务启动时会自动注册两个适配器。
+
+**Q: 能同时运行微信吗？**
+
+可以，设置 `WECHAT_ENABLED=true` 即可同时运行 Telegram + 钉钉 + 微信三个适配器。
+
+**Q: 微信 session 过期了怎么办？**
+
+重启服务，终端会自动显示新的登录二维码，扫码后继续。
 

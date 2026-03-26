@@ -11,6 +11,7 @@ import { ClaudeRunner } from "./runner/claude.runner.js";
 import { MessageRouter } from "./router/message.router.js";
 import { TelegramAdapter } from "./adapters/telegram.adapter.js";
 import { DingTalkAdapter } from "./adapters/dingtalk.adapter.js";
+import { WeChatAdapter } from "./adapters/wechat.adapter.js";
 import { loadProfile } from "./clawra/profile.js";
 import { loadSchedule } from "./clawra/schedule.js";
 import { ClawraScheduler } from "./clawra/scheduler.js";
@@ -45,7 +46,7 @@ async function main() {
   const router = new MessageRouter(runner, permissions);
 
   // ── 适配器列表（供调度器使用）────────────────────────────────────────────
-  const activeAdapters: Array<TelegramAdapter | InstanceType<typeof DingTalkAdapter>> = [];
+  const activeAdapters: Array<TelegramAdapter | InstanceType<typeof DingTalkAdapter> | WeChatAdapter> = [];
 
   // ── Telegram ──────────────────────────────────────────────────────────────
   if (process.env["TELEGRAM_BOT_TOKEN"]) {
@@ -65,6 +66,13 @@ async function main() {
     });
     router.registerAdapter(dingtalk);
     activeAdapters.push(dingtalk);
+  }
+
+  // ── 微信（iLink ClawBot）──────────────────────────────────────────────────
+  if (process.env["WECHAT_ENABLED"] === "true") {
+    const wechat = new WeChatAdapter();
+    router.registerAdapter(wechat);
+    activeAdapters.push(wechat);
   }
 
   if (router["adapters"].length === 0) {
