@@ -14,6 +14,7 @@ interface MessageItem {
   type: number;           // 1=文字, 2=图片, 3=语音, 4=文件, 5=视频
   text_item?: { text: string };
   image_item?: { media_id: string };
+  voice_item?: { text?: string };
 }
 
 interface WeChatMessage {
@@ -227,6 +228,7 @@ export class WeChatAdapter implements IMAdapter {
 
     const textItem = msg.item_list?.find((i) => i.type === 1);
     const imageItem = msg.item_list?.find((i) => i.type === 2);
+    const voiceItem = msg.item_list?.find((i) => i.type === 3);
 
     let messageText: string;
 
@@ -241,6 +243,14 @@ export class WeChatAdapter implements IMAdapter {
         ? `[用户发来了一张图片，请描述或处理它: ${imageUrl}]`
         : "[用户发来了一张图片]";
       console.log(`[WeChat] 处理图片消息 mediaId=${mediaId} url=${imageUrl ?? "未获取"} from=${msg.from_user_id}`);
+    } else if (voiceItem) {
+      const voiceText = voiceItem.voice_item?.text;
+      if (!voiceText) {
+        console.log(`[WeChat] 语音消息无文字识别结果 from=${msg.from_user_id}`);
+        return;
+      }
+      messageText = voiceText;
+      console.log(`[WeChat] 处理语音消息: "${messageText}" from=${msg.from_user_id}`);
     } else {
       console.log(`[WeChat] 忽略不支持的消息类型 from=${msg.from_user_id} items=${JSON.stringify(msg.item_list)}`);
       return;

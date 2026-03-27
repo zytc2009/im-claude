@@ -5,16 +5,20 @@
 ### 整体链路
 
 ```
-                          ┌──────────────────────────────────────┐
-                          │           im-claude Bridge            │
-                          │                                        │
-  ┌──────────┐  消息      │  ┌──────────────┐  ┌──────────────┐  │
-  │ Telegram │ ────────►  │  │ TelegramAdapter  │  │ DingTalkAdapter │
-  └──────────┘            │  └──────┬───────┘  └──────┬───────┘  │
-                          │         │                   │          │
-  ┌──────────┐  消息      │         └──────────┬────────┘          │
-  │ DingTalk │ ────────►  │                    │                   │
-  └──────────┘            │            ┌───────▼────────┐          │
+                          ┌──────────────────────────────────────────────┐
+                          │              im-claude Bridge                 │
+                          │                                               │
+  ┌──────────┐  消息      │  ┌───────────────┐  ┌───────────────┐        │
+  │ Telegram │ ────────►  │  │TelegramAdapter│  │DingTalkAdapter│        │
+  └──────────┘            │  └──────┬────────┘  └──────┬────────┘        │
+                          │         │                   │                 │
+  ┌──────────┐  消息      │  ┌──────┴────────┐         │                 │
+  │ DingTalk │ ────────►  │  │ WeChatAdapter │         │                 │
+  └──────────┘            │  └──────┬────────┘         │                 │
+                          │         │                   │                 │
+  ┌──────────┐  消息      │         └──────────┬────────┘                 │
+  │  WeChat  │ ────────►  │                    │                          │
+  └──────────┘            │            ┌───────▼────────┐                 │
                           │            │  MessageRouter  │          │
                           │            └───────┬────────┘          │
                           │                    │ 被动响应链路        │
@@ -65,7 +69,8 @@
 | 调度器 | `src/clawra/scheduler.ts` | 管理 CronJob 生命周期；串行执行消息+照片发送 |
 | IM 路由 | `src/router/message.router.ts` | 注册适配器；转发消息；检测图片 URL |
 | 适配器基类 | `src/adapters/base.adapter.ts` | IMAdapter 接口定义 |
-| Telegram | `src/adapters/telegram.adapter.ts` | Telegram Bot API 接入；sendPhoto 支持 |
+| Telegram | `src/adapters/telegram.adapter.ts` | Telegram Bot API 接入；sendPhoto 支持；Whisper 语音转文字 |
+| 微信 | `src/adapters/wechat.adapter.ts` | 微信 iLink Bot API 接入；长轮询；图片加密上传；语音消息（读取 ASR text 字段） |
 | Claude Runner | `src/runner/claude.runner.ts` | 包装 claude-agent-sdk query()；注入 Clawra 人设 |
 | 入口 | `src/index.ts` | 组装所有组件；条件启动调度器；优雅退出 |
 
@@ -208,7 +213,35 @@ ClawraScheduler.lastPhotoDate (初始值: "")
 
 ---
 
-## 8. 微信图片上传协议
+## 8. 微信消息处理
+
+### 支持的消息类型
+
+| type | 类型 | 处理方式 |
+|------|------|----------|
+| 1 | 文字 | 直接读取 `text_item.text`，传给 Claude |
+| 2 | 图片 | 通过 `getdownloadinfo` 获取下载 URL，传给 Claude |
+| 3 | 语音 | 直接读取 `voice_item.text`（微信内置 ASR 识别结果），传给 Claude |
+| 其他 | 文件/视频等 | 忽略，不处理 |
+
+### 语音消息处理
+
+微信在语音消息的 `voice_item.text` 字段中已内置 ASR 识别结果，无需额外调用 Whisper 或第三方语音识别服务，直接读取即可。
+
+```
+voice_item: {
+  text: "已识别的文字内容",   ← 微信原生 ASR
+  media: { ... },             ← 加密音频数据（不使用）
+  sample_rate: 16000,
+  playtime: 3020              ← 时长(ms)
+}
+```
+
+若 `voice_item.text` 为空（如识别失败），则静默丢弃该消息。
+
+---
+
+## 9. 微信图片上传协议
 
 基于 `@tencent-weixin/openclaw-weixin` 官方实现，完整流程：
 

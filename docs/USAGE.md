@@ -41,11 +41,12 @@ npm start
 | `DINGTALK_AGENT_ID` | 钉钉应用 AgentId | 若配置 DingTalk 则必填 | — |
 | `DINGTALK_WEBHOOK_SECRET` | 钉钉 Webhook 签名密钥 | 若配置 DingTalk 则必填 | — |
 | `DINGTALK_WEBHOOK_PORT` | 钉钉 Webhook 监听端口 | 否 | `3000` |
+| `WECHAT_ENABLED` | 是否启用微信适配器 | 否 | `false` |
 | `FAL_KEY` | fal.ai API Key，用于自拍照生成 | 否（无则跳过照片生成）| — |
 | `ALLOWED_USER_IDS` | 允许使用的用户 ID 列表，逗号分隔 | 否 | 空（拒绝所有） |
 | `ALLOWED_TOOLS` | Claude Agent 允许使用的工具列表 | 否 | `Read,Glob,Grep` |
 | `WORKING_DIR` | Claude Agent 工作目录 | 否 | 当前目录 |
-| `WHISPER_MODEL` | 本地 Whisper 语音识别模型大小 | 否 | `base` |
+| `WHISPER_MODEL` | Whisper 语音识别模型大小（仅 Telegram 语音使用）| 否 | `base` |
 | `CLAWRA_TARGET_CHAT_ID` | 主动消息推送目标的 Telegram Chat ID | 否 | `8251974296` |
 | `CLAWRA_TIMEZONE` | 调度器时区 | 否 | `Asia/Shanghai` |
 | `CLAWRA_SCHEDULE_ENABLED` | 是否开启主动消息调度 | 否 | `false` |
@@ -168,6 +169,18 @@ npm run test:watch
 **Q: 启动失败，提示"缺少必要环境变量"**
 
 检查 `.env` 文件是否存在，并且对应 key 有值（不是空字符串）。
+
+**Q: 微信 Bot 无响应**
+
+1. 确认 `.env` 中设置了 `WECHAT_ENABLED=true`
+2. 检查 `ALLOWED_USER_IDS` 是否包含你的微信用户 ID（格式：`xxx@im.wechat`）
+3. 查看启动日志是否有 `[WeChat] Bot 就绪，开始长轮询...`
+4. 若 Token 过期，删除项目根目录的 `.wechat-token` 文件后重启，重新扫码登录
+
+**Q: 微信语音消息无回复**
+
+微信语音消息依赖微信内置 ASR 识别。若识别结果为空（极少数情况），消息会被静默丢弃。
+无需安装 Whisper，语音识别由微信服务端完成。
 
 **Q: Telegram Bot 无响应**
 
