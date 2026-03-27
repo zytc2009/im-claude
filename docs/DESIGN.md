@@ -204,6 +204,7 @@ ClawraScheduler.lastPhotoDate (初始值: "")
 | Adapter 发送失败 | 逐个 adapter 独立 try/catch，单个失败不影响其他 |
 | 调度器 entry 处理异常 | catch 后打印日志，不影响其他 CronJob 运行 |
 | 微信图片上传失败 | 自动降级为发送原始 URL 文字（fallbackText） |
+| replyPrefix 未配置 | loadProfile 默认值为"亲爱的，" |
 
 ---
 

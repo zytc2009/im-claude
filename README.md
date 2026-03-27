@@ -340,6 +340,27 @@ ALLOWED_USER_IDS=8251974296,abc123@im.wechat
 
 第一次运行时，会弹出配置向导，让你给 Clawra 起名字、设定性格和爱好。
 
+### 人设配置（config/clawra-profile.json）
+
+| 字段 | 说明 | 示例 |
+|------|------|------|
+| `name` | 名字 | `"Clawra"` |
+| `gender` | 性别 | `"female"` |
+| `personality` | 性格标签 | `["温柔体贴", "略带撒娇"]` |
+| `hobbies` | 兴趣爱好 | `["瑜伽", "咖啡"]` |
+| `speakingStyle` | 说话风格描述 | `"口语化，喜欢用波浪号~"` |
+| `referenceImageUrl` | 参考外貌图片 URL | `"https://..."` |
+| `language` | 回复语言 | `"zh-CN"` |
+| `replyPrefix` | 每条回复的开头前缀 | `"亲爱的，"` |
+
+修改 `replyPrefix` 可自定义亲昵称呼，重启 bot 即生效：
+
+```json
+{
+  "replyPrefix": "宝贝，"
+}
+```
+
 <img src="docs\images\IMG_2552.jpg" style="zoom:50%;float:left" />
 
 ## 访问控制
