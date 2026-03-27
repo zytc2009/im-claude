@@ -74,6 +74,11 @@ export class ClaudeRunner {
     return finalText.trim() || "（无响应）";
   }
 
+  getReplyPrefix(): string {
+    const profilePath = path.resolve(process.cwd(), "config/clawra-profile.json");
+    return loadProfile(profilePath).replyPrefix;
+  }
+
   clearSession(userId: string): void {
     this.sessions.clear(userId);
   }

@@ -12,6 +12,7 @@ const ClawraProfileSchema = z.object({
   speakingStyle: z.string().min(1),
   referenceImageUrl: z.string().url(),
   language: z.string().min(1),
+  replyPrefix: z.string().optional(),
 });
 
 // ── Cache ─────────────────────────────────────────────────────────────────────
@@ -39,6 +40,7 @@ export function loadProfile(configPath: string): ClawraProfile {
     speakingStyle: parsed.speakingStyle,
     referenceImageUrl: parsed.referenceImageUrl,
     language: parsed.language,
+    replyPrefix: parsed.replyPrefix ?? "亲爱的，",
   };
 
   profileCache.set(configPath, profile);

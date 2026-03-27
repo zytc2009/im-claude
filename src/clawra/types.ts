@@ -6,6 +6,8 @@ export interface ClawraProfile {
   readonly speakingStyle: string;
   readonly referenceImageUrl: string;
   readonly language: string;
+  /** 每条回复开头自动添加的前缀，默认 "亲爱的，" */
+  readonly replyPrefix: string;
 }
 
 export type MessageType = "greeting" | "meal" | "activity" | "goodnight";

@@ -61,6 +61,8 @@ export class MessageRouter {
       const response = await this.runner.run(msg.userId, msg.text);
       console.log(`[Router] Claude 响应: ${JSON.stringify(response)}`);
 
+      const prefix = this.runner.getReplyPrefix();
+
       // 检测回复中是否包含图片 URL（fal.media 或其他图片链接）
       const imageUrlMatch = response.match(
         /https?:\/\/\S+\.(?:jpg|jpeg|png|webp|gif)(?:\?\S*)?/i
@@ -78,10 +80,11 @@ export class MessageRouter {
           .replace(/https?:\/\/\S+/g, "")            // 移除所有 URL
           .replace(/\n{3,}/g, "\n")                  // 合并多余空行
           .trim();
-        const fallbackText = caption ? `${caption}\n${rawUrl}` : rawUrl;
-        await adapter.sendMessage({ chatId: msg.chatId, text: caption, mediaUrl: imageUrl, fallbackText });
+        const prefixedCaption = caption ? `${prefix}${caption}` : caption;
+        const fallbackText = prefixedCaption ? `${prefixedCaption}\n${rawUrl}` : rawUrl;
+        await adapter.sendMessage({ chatId: msg.chatId, text: prefixedCaption, mediaUrl: imageUrl, fallbackText });
       } else {
-        await adapter.sendMessage({ chatId: msg.chatId, text: response });
+        await adapter.sendMessage({ chatId: msg.chatId, text: `${prefix}${response}` });
       }
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
