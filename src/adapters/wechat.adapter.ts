@@ -110,9 +110,11 @@ export class WeChatAdapter implements IMAdapter {
       return;
     }
     console.log(`[WeChat] 发送消息到 ${msg.chatId}, 有图片=${!!msg.mediaUrl}`);
-    // 图片暂时降级为文字（upload_media 接口需单独实现）
-    const text = msg.text || "";
-    await this.sendText(contextToken, msg.chatId, text);
+    if (msg.mediaUrl) {
+      await this.sendImage(contextToken, msg.chatId, msg.mediaUrl, msg.text ?? "", msg.fallbackText ?? msg.text ?? "");
+    } else {
+      await this.sendText(contextToken, msg.chatId, msg.text ?? "");
+    }
   }
 
   // ── 登录流程 ───────────────────────────────────────────────────────────────
@@ -215,7 +217,7 @@ export class WeChatAdapter implements IMAdapter {
   }
 
   private async handleMessage(msg: WeChatMessage): Promise<void> {
-    console.log(`[WeChat] 收到消息: type=${msg.message_type} from=${msg.from_user_id} items=${JSON.stringify(msg.item_list)}`);
+    console.log(`[WeChat] 收到消息: type=${msg.message_type} from=${msg.from_user_id} context_token=${msg.context_token} items=${JSON.stringify(msg.item_list)}`);
     if (!this.handler) return;
     // 只处理用户发来的消息（message_type=1）
     if (msg.message_type !== 1) return;
@@ -223,18 +225,31 @@ export class WeChatAdapter implements IMAdapter {
     // 保存 context_token
     this.contextTokens.set(msg.from_user_id!, msg.context_token!);
 
-    // 只处理文字
     const textItem = msg.item_list?.find((i) => i.type === 1);
-    if (!textItem?.text_item?.text) {
-      console.log(`[WeChat] 忽略非文字消息 from=${msg.from_user_id}`);
+    const imageItem = msg.item_list?.find((i) => i.type === 2);
+
+    let messageText: string;
+
+    if (textItem?.text_item?.text) {
+      messageText = textItem.text_item.text;
+      console.log(`[WeChat] 处理文字消息: "${messageText}" from=${msg.from_user_id}`);
+    } else if (imageItem?.image_item) {
+      // 尝试下载图片后传给 Claude，失败则传文字占位符
+      const mediaId = (imageItem.image_item as { media_id?: string; aes_key?: string }).media_id;
+      const imageUrl = mediaId ? await this.downloadImageUrl(mediaId) : null;
+      messageText = imageUrl
+        ? `[用户发来了一张图片，请描述或处理它: ${imageUrl}]`
+        : "[用户发来了一张图片]";
+      console.log(`[WeChat] 处理图片消息 mediaId=${mediaId} url=${imageUrl ?? "未获取"} from=${msg.from_user_id}`);
+    } else {
+      console.log(`[WeChat] 忽略不支持的消息类型 from=${msg.from_user_id} items=${JSON.stringify(msg.item_list)}`);
       return;
     }
 
-    console.log(`[WeChat] 处理消息: "${textItem.text_item.text}" from=${msg.from_user_id}`);
     await this.handler({
       userId: msg.from_user_id!,
       chatId: msg.from_user_id!,
-      text: textItem.text_item.text,
+      text: messageText,
       platform: "wechat",
       timestamp: new Date(),
     });
@@ -242,8 +257,8 @@ export class WeChatAdapter implements IMAdapter {
 
   // ── 发送消息 ───────────────────────────────────────────────────────────────
 
-  private async sendText(contextToken: string, toUserId: string, text: string): Promise<void> {
-    if (!text.trim()) return;
+  private async sendText(contextToken: string, toUserId: string, text: string): Promise<boolean> {
+    if (!text.trim()) return true;
     const plain = stripMarkdown(text);
     const chunks = splitText(plain, 2000);
     for (const chunk of chunks) {
@@ -264,46 +279,147 @@ export class WeChatAdapter implements IMAdapter {
       const code = res.data.errcode ?? res.data.ret ?? 0;
       if (code !== 0) {
         console.error(`[WeChat] sendmessage 失败 code=${code}: ${res.data.errmsg}`);
-        throw new Error(`[WeChat] sendmessage 失败: ${res.data.errmsg}`);
+        return false;
       }
       console.log(`[WeChat] sendmessage 成功`);
     }
+    return true;
   }
 
-  private async sendImage(contextToken: string, toUserId: string, imageUrl: string, caption: string): Promise<void> {
+  /** 通过 media_id 获取图片下载 URL（失败返回 null） */
+  private async downloadImageUrl(mediaId: string): Promise<string | null> {
     try {
-      const imgRes = await axios.get<ArrayBuffer>(imageUrl, { responseType: "arraybuffer", timeout: 20_000 });
-      const buffer = Buffer.from(imgRes.data);
-
-      const FormData = (await import("form-data")).default;
-      const form = new FormData();
-      form.append("file", buffer, { filename: "photo.jpg", contentType: "image/jpeg" });
-
-      const uploadRes = await this.http.post<{ ret: number; media_id?: string; errmsg?: string }>(
-        "/ilink/bot/upload_media",
-        form,
-        { headers: { ...form.getHeaders() } },
-      );
-
-      if (uploadRes.data.ret === 0 && uploadRes.data.media_id) {
-        await this.http.post<SendMessageResponse>("/ilink/bot/sendmessage", {
-          msg: {
-            to_user_id: toUserId,
-            message_type: 2,
-            message_state: 2,
-            context_token: contextToken,
-            item_list: [{ type: 2, image_item: { media_id: uploadRes.data.media_id } }],
-          },
-        });
-      } else {
-        throw new Error(uploadRes.data.errmsg ?? "upload_media failed");
+      const res = await this.http.post<{
+        ret?: number; errcode?: number; errmsg?: string;
+        download_url?: string; url?: string;
+      }>("ilink/bot/getdownloadinfo", {
+        media_id: mediaId,
+        base_info: { channel_version: CHANNEL_VERSION },
+      });
+      const code = res.data.errcode ?? res.data.ret ?? 0;
+      if (code !== 0) {
+        console.warn(`[WeChat] getdownloadinfo 失败 code=${code}: ${res.data.errmsg}`);
+        return null;
       }
+      return res.data.download_url ?? res.data.url ?? null;
+    } catch (err) {
+      console.warn("[WeChat] getdownloadinfo 异常:", err instanceof Error ? err.message : err);
+      return null;
+    }
+  }
 
+  private async sendImage(contextToken: string, toUserId: string, imageUrl: string, caption: string, fallbackText = caption): Promise<void> {
+    try {
+      const uploaded = await this.uploadMedia(imageUrl, toUserId);
+      // aes_key in sendmessage = base64(hex字符串)，与官方实现一致
+      const aesKeyBase64 = Buffer.from(uploaded.aeskeyHex).toString("base64");
+      const clientId = `im-claude-${crypto.randomBytes(8).toString("hex")}`;
+      console.log(`[WeChat] 发送图片 clientId=${clientId} mid_size=${uploaded.fileSizeCiphertext}`);
+      const res = await this.http.post<SendMessageResponse>("ilink/bot/sendmessage", {
+        msg: {
+          from_user_id: "",
+          to_user_id: toUserId,
+          client_id: clientId,
+          message_type: 2,
+          message_state: 2,
+          context_token: contextToken,
+          item_list: [{
+            type: 2,
+            image_item: {
+              media: {
+                encrypt_query_param: uploaded.downloadEncryptedQueryParam,
+                aes_key: aesKeyBase64,
+                encrypt_type: 1,
+              },
+              mid_size: uploaded.fileSizeCiphertext,  // 密文大小
+            },
+          }],
+        },
+        base_info: { channel_version: CHANNEL_VERSION },
+      });
+      const code = res.data.errcode ?? res.data.ret ?? 0;
+      if (code !== 0) throw new Error(`sendmessage(image) 失败 code=${code}: ${res.data.errmsg}`);
+      console.log("[WeChat] 图片发送成功");
       if (caption) await this.sendText(contextToken, toUserId, caption);
     } catch (err) {
-      console.warn("[WeChat] 图片发送失败，降级为文字:", err instanceof Error ? err.message : err);
-      if (caption) await this.sendText(contextToken, toUserId, caption);
+      console.warn("[WeChat] 图片发送失败，降级为发链接:", err instanceof Error ? err.message : err);
+      await this.sendText(contextToken, toUserId, fallbackText || imageUrl);
     }
+  }
+
+  /** AES-128-ECB 密文大小（PKCS7 padding 到 16 字节边界） */
+  private aesEcbPaddedSize(plaintextSize: number): number {
+    return Math.ceil((plaintextSize + 1) / 16) * 16;
+  }
+
+  /** 下载图片并通过加密流程上传到微信 CDN，返回用于发送的 image_item */
+  private async uploadMedia(imageUrl: string, toUserId: string): Promise<{
+    downloadEncryptedQueryParam: string;
+    aeskeyHex: string;
+    fileSize: number;
+    fileSizeCiphertext: number;
+  }> {
+    const CDN_BASE_URL = "https://novac2c.cdn.weixin.qq.com/c2c";
+
+    // Step 1: 下载图片
+    console.log(`[WeChat] 下载图片: ${imageUrl}`);
+    const imgRes = await axios.get<ArrayBuffer>(imageUrl, {
+      responseType: "arraybuffer",
+      timeout: 30_000,
+      maxRedirects: 5,
+    });
+    const buffer       = Buffer.from(imgRes.data);
+    const rawsize      = buffer.length;
+    const rawfilemd5   = crypto.createHash("md5").update(buffer).digest("hex");
+    const filesize     = this.aesEcbPaddedSize(rawsize);  // 密文大小
+    console.log(`[WeChat] 图片下载完成 rawsize=${rawsize} filesize=${filesize} md5=${rawfilemd5}`);
+
+    // Step 2: 生成 aeskey(hex) 和 filekey，获取上传授权
+    const aesKeyBuf  = crypto.randomBytes(16);
+    const aeskeyHex  = aesKeyBuf.toString("hex");
+    const filekey    = crypto.randomBytes(16).toString("hex");
+
+    const authRes = await this.http.post<{
+      ret?: number; errcode?: number; errmsg?: string;
+      upload_param?: string;
+    }>("ilink/bot/getuploadurl", {
+      filekey,
+      media_type: 1,          // IMAGE
+      to_user_id: toUserId,
+      rawsize,
+      rawfilemd5,
+      filesize,
+      no_need_thumb: true,
+      aeskey: aeskeyHex,      // hex 编码
+      base_info: { channel_version: CHANNEL_VERSION },
+    });
+    const authCode = authRes.data.errcode ?? authRes.data.ret ?? 0;
+    if (authCode !== 0) throw new Error(`getuploadurl 失败 code=${authCode}: ${authRes.data.errmsg}`);
+
+    const { upload_param } = authRes.data;
+    if (!upload_param) throw new Error("getuploadurl 未返回 upload_param");
+    console.log(`[WeChat] 获取上传授权成功`);
+
+    // Step 3: AES-128-ECB 加密图片数据
+    const cipher    = crypto.createCipheriv("aes-128-ecb", aesKeyBuf, null);
+    const encrypted = Buffer.concat([cipher.update(buffer), cipher.final()]);
+
+    // Step 4: 上传到 CDN（不带 Authorization header）
+    const cdnUrl = `${CDN_BASE_URL}/upload?encrypted_query_param=${encodeURIComponent(upload_param)}&filekey=${encodeURIComponent(filekey)}`;
+    console.log(`[WeChat] 上传加密图片到 CDN...`);
+    const cdnRes = await axios.post(cdnUrl, encrypted, {
+      headers: { "Content-Type": "application/octet-stream" },
+      timeout: 60_000,
+      validateStatus: () => true,
+    });
+
+    const downloadEncryptedQueryParam = cdnRes.headers["x-encrypted-param"] as string | undefined;
+    if (!downloadEncryptedQueryParam) {
+      throw new Error(`CDN 上传失败 status=${cdnRes.status}，未返回 x-encrypted-param`);
+    }
+    console.log(`[WeChat] CDN 上传成功`);
+
+    return { downloadEncryptedQueryParam, aeskeyHex, fileSize: rawsize, fileSizeCiphertext: filesize };
   }
 
   // ── Token 持久化 ───────────────────────────────────────────────────────────

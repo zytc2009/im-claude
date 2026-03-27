@@ -12,7 +12,8 @@ export interface IncomingMessage {
 export interface OutgoingMessage {
   chatId: string;
   text: string;
-  mediaUrl?: string;  // 图片 URL，设置后发送图片而非文字
+  mediaUrl?: string;       // 图片 URL（可能经过代理），用于实际上传
+  fallbackText?: string;   // 图片上传失败时发送的文字内容（含原始 URL）
 }
 
 export type MessageHandler = (msg: IncomingMessage) => Promise<void>;

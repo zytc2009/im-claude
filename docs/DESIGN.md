@@ -203,4 +203,69 @@ ClawraScheduler.lastPhotoDate (初始值: "")
 | fal.ai 调用失败/超时 | 静默返回 null，不发照片，仍发文字消息 |
 | Adapter 发送失败 | 逐个 adapter 独立 try/catch，单个失败不影响其他 |
 | 调度器 entry 处理异常 | catch 后打印日志，不影响其他 CronJob 运行 |
+| 微信图片上传失败 | 自动降级为发送原始 URL 文字（fallbackText） |
+
+---
+
+## 8. 微信图片上传协议
+
+基于 `@tencent-weixin/openclaw-weixin` 官方实现，完整流程：
+
+### 8.1 getuploadurl（扁平参数格式）
+
+```json
+POST ilink/bot/getuploadurl
+{
+  "filekey": "<16字节随机hex>",
+  "media_type": 1,
+  "to_user_id": "<目标用户wxid>",
+  "rawsize": 12345,
+  "rawfilemd5": "<明文MD5>",
+  "filesize": 12352,
+  "no_need_thumb": true,
+  "aeskey": "<16字节随机hex编码>",
+  "base_info": { "channel_version": "..." }
+}
+```
+
+- `filesize` = AES-128-ECB 密文大小 = `Math.ceil((rawsize + 1) / 16) * 16`
+- `aeskey` 用 **hex** 编码（不是 base64）
+- 响应字段为 `upload_param`
+
+### 8.2 CDN 上传
+
+```
+POST https://novac2c.cdn.weixin.qq.com/c2c/upload
+  ?encrypted_query_param=<upload_param>
+  &filekey=<filekey>
+
+Body: AES-128-ECB 加密后的图片数据（无 Authorization header）
+Response header: x-encrypted-param → 下载参数
+```
+
+### 8.3 sendmessage image_item
+
+```json
+{
+  "type": 2,
+  "image_item": {
+    "media": {
+      "encrypt_query_param": "<x-encrypted-param>",
+      "aes_key": "<base64(hex字符串UTF-8字节)>",
+      "encrypt_type": 1
+    },
+    "mid_size": 12352
+  }
+}
+```
+
+- `aes_key` = `Buffer.from(aeskeyHex).toString("base64")`
+- `mid_size` = 密文大小（不是明文大小）
+
+### 8.4 fal.ai 图片代理
+
+fal.ai 域名在国内不可达，通过 wsrv.nl 代理后再上传微信 CDN：
+```
+https://wsrv.nl/?url=<encodeURIComponent(fal.media URL)>&n=-1
+```
 | 环境变量缺失 | `requireEnv()` 在启动时 fail-fast，明确提示缺失的 key |
