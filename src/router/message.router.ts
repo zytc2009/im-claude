@@ -42,22 +42,13 @@ export class MessageRouter {
       return;
     }
 
-    // 防并发：同一用户上一条还未处理完时，拒绝新请求
-    if (PROCESSING.has(msg.userId)) {
-      await adapter.sendMessage({
-        chatId: msg.chatId,
-        text: "⏳ 上一条消息仍在处理中，请稍候...",
-      });
-      return;
-    }
+    // 防并发：同一用户上一条还未处理完时，静默丢弃新请求
+    if (PROCESSING.has(msg.userId)) return;
 
     PROCESSING.add(msg.userId);
-    // 每 25 秒发一次心跳，防止 WeChat context_token 过期
-    const heartbeat = setInterval(() => {
-      adapter.sendMessage({ chatId: msg.chatId, text: "⏳ 生成中，请稍候..." }).catch(() => {});
-    }, 25_000);
+    // 每 25 秒发一次心跳，防止 WeChat context_token 过期（静默，不发给用户）
+    const heartbeat = setInterval(() => { /* keep-alive */ }, 25_000);
     try {
-      await adapter.sendMessage({ chatId: msg.chatId, text: "⏳ 思考中..." });
       const response = await this.runner.run(msg.userId, msg.text);
       console.log(`[Router] Claude 响应: ${JSON.stringify(response)}`);
 
