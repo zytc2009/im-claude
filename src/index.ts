@@ -49,7 +49,7 @@ async function main() {
   const activeAdapters: Array<TelegramAdapter | InstanceType<typeof DingTalkAdapter> | WeChatAdapter> = [];
 
   // ── Telegram ──────────────────────────────────────────────────────────────
-  if (process.env["TELEGRAM_BOT_TOKEN"]) {
+  if (process.env["TELEGRAM_ENABLED"] !== "false" && process.env["TELEGRAM_BOT_TOKEN"]) {
     const telegram = new TelegramAdapter(requireEnv("TELEGRAM_BOT_TOKEN"));
     router.registerAdapter(telegram);
     activeAdapters.push(telegram);
