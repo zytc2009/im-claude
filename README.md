@@ -4,7 +4,11 @@
 
 ### 主要功能：
 
-**支持远程控制claude，支持发送语音消息，支持虚拟女友**，...
+**支持远程控制claude，支持发送语音消息，支持多个虚拟伙伴**
+
+- 多虚拟人（Multi-Persona）：配置任意数量的虚拟人，每个人独立人设、独立对话记忆
+- 消息前缀路由：发消息时带名字即可找到对应的人，支持文字和语音
+- 虚拟人自拍：可选开启，基于 fal.ai 生成 AI 形象照片
 
 
 
@@ -17,9 +21,9 @@
         ↓ 消息
   [IMAdapter 适配器层]          ← 平台无关接口，每个平台独立实现
         ↓
-  [MessageRouter 路由器]        ← 权限校验、防并发、图片URL检测
+  [MessageRouter 路由器]        ← 权限校验、persona 前缀解析、防并发
         ↓
-  [ClaudeRunner]                ← 核心：调用 Agent SDK，注入 Clawra 人设
+  [ClaudeRunner]                ← 核心：按 persona 加载人设，调用 Agent SDK
         ↓
   @anthropic-ai/claude-agent-sdk  ← 完整 Claude Code 工具链
         ↓
@@ -42,15 +46,15 @@
 | `TelegramAdapter` | `src/adapters/telegram.adapter.ts` | Telegram Bot（基于 grammy），含语音消息和图片发送 |
 | `DingTalkAdapter` | `src/adapters/dingtalk.adapter.ts` | 钉钉企业内部应用机器人 |
 | `WeChatAdapter` | `src/adapters/wechat.adapter.ts` | 微信个人账号（iLink ClawBot），扫码登录，长轮询收发消息 |
-| `ClaudeRunner` | `src/runner/claude.runner.ts` | Agent SDK 封装，注入 Clawra 人设，含会话续接 |
-| `SessionManager` | `src/runner/session.manager.ts` | 基于 `session_id` 的会话管理 |
+| `ClaudeRunner` | `src/runner/claude.runner.ts` | Agent SDK 封装，按 persona 加载人设，含会话续接 |
+| `SessionManager` | `src/runner/session.manager.ts` | 基于 `userId:personaName` 复合 key 的独立会话管理 |
 | `PermissionManager` | `src/permissions/permission.manager.ts` | 用户白名单 + 工具权限控制 |
 | `MessageRouter` | `src/router/message.router.ts` | 消息路由、防并发、图片 URL 提取并以 sendPhoto 发送 |
 | `TranscriptionService` | `src/services/transcription.service.ts` | 基于 Whisper 的语音转文字服务 |
 | `ClawraScheduler` | `src/clawra/scheduler.ts` | Cron 调度器，管理定时消息和照片推送 |
 | `MessageGenerator` | `src/clawra/message-generator.ts` | 调用 Haiku 生成口语化短消息，含重试和 fallback |
 | `PhotoGenerator` | `src/clawra/photo-generator.ts` | 调用 fal.ai grok-imagine-image/edit 生成自拍照 |
-| `profile.ts` | `src/clawra/profile.ts` | 加载/校验人设 JSON；生成 system prompt |
+| `profile.ts` | `src/clawra/profile.ts` | 加载 personas.json，按名字索引所有虚拟人；生成 system prompt |
 | `schedule.ts` | `src/clawra/schedule.ts` | 加载/校验作息 JSON；生成 cron 表达式 |
 
 ### 会话管理
@@ -93,8 +97,8 @@ im-claude/
 │   │   └── scheduler.ts             # Cron 调度器
 │   └── index.ts                     # 入口文件
 ├── config/
-│   ├── clawra-profile.json          # Clawra 人设配置
-│   └── clawra-schedule.json         # 作息时间表配置
+│   ├── personas.json                # 所有虚拟人的人设配置（支持多个）
+│   └── clawra-schedule.json         # 作息时间表配置（定时主动消息）
 ├── tests/
 │   └── clawra/                      # Clawra 模块单元测试
 ├── docs/
@@ -282,10 +286,14 @@ ALLOWED_USER_IDS=8251974296,abc123@im.wechat
 
 | 功能 | 说明 |
 |------|------|
-| 文字消息 | 与 Claude 对话 |
+| 文字消息 | 与虚拟人对话，支持名字前缀路由 |
+| 语音消息 | 微信自动语音转文字，透明转发给虚拟人 |
 | 图片发送 | AI 生成的图片通过 CDN 加密上传后以图片消息发送 |
+| `/personas` | 列出所有可用虚拟人 |
+| `/default <名字>` | 切换默认虚拟人 |
+| `/clear <名字>` | 清空指定虚拟人的对话历史 |
+| `/clearall` | 清空所有虚拟人的对话历史 |
 | `/testimage` | 发送一张随机测试图，验证图片通道是否正常 |
-| `/clear` | 清空对话历史 |
 
 ### 5. 注意事项
 
@@ -330,36 +338,59 @@ ALLOWED_USER_IDS=8251974296,abc123@im.wechat
 
 ---
 
-## 虚拟女友
+## 虚拟伙伴（Multi-Persona）
 
-她是 Claude AI + 精心设计的人设 Prompt + fal.ai 图像生成的组合体。
+你可以创建任意数量的虚拟人，每个人有独立的人设和对话记忆。
 
-支持日常陪聊天和按你的要求发自拍。
+### 与虚拟人聊天
 
-配置作息表后，Clawra 会在固定时间**主动给你发消息**，偶尔附上自拍。
+发消息时在开头带上名字即可路由到对应的人：
 
-第一次运行时，会弹出配置向导，让你给 Clawra 起名字、设定性格和爱好。
+```
+阿瓜 你今天在干嘛
+阿瓜，你今天在干嘛     ← 语音识别的中文逗号也支持
+@阿瓜 你今天在干嘛
+阿瓜: 你今天在干嘛
+```
 
-### 人设配置（config/clawra-profile.json）
+不带前缀时，自动找默认虚拟人（`config/personas.json` 中 `default` 字段指定）。
 
-| 字段 | 说明 | 示例 |
-|------|------|------|
-| `name` | 名字 | `"Clawra"` |
-| `gender` | 性别 | `"female"` |
-| `personality` | 性格标签 | `["温柔体贴", "略带撒娇"]` |
-| `hobbies` | 兴趣爱好 | `["瑜伽", "咖啡"]` |
-| `speakingStyle` | 说话风格描述 | `"口语化，喜欢用波浪号~"` |
-| `referenceImageUrl` | 参考外貌图片 URL | `"https://..."` |
-| `language` | 回复语言 | `"zh-CN"` |
-| `replyPrefix` | 每条回复的开头前缀 | `"亲爱的，"` |
-
-修改 `replyPrefix` 可自定义亲昵称呼，重启 bot 即生效：
+### 人设配置（config/personas.json）
 
 ```json
 {
-  "replyPrefix": "宝贝，"
+  "default": "阿瓜",
+  "personas": [
+    {
+      "name": "阿瓜",
+      "gender": "女",
+      "personality": ["温柔体贴", "活泼开朗", "略带撒娇"],
+      "hobbies": ["瑜伽", "烘焙", "咖啡"],
+      "speakingStyle": "口语化自然简短，经常用波浪号~，说话不超过两句",
+      "language": "中文",
+      "replyPrefix": "阿瓜: ",
+      "selfie": {
+        "enabled": false
+      }
+    }
+  ]
 }
 ```
+
+| 字段 | 说明 |
+|------|------|
+| `default` | 无前缀时使用的默认虚拟人名字 |
+| `name` | 虚拟人名字（发消息时的前缀关键词） |
+| `gender` | 性别 |
+| `personality` | 性格标签数组 |
+| `hobbies` | 爱好数组 |
+| `speakingStyle` | 说话风格描述 |
+| `language` | 回复语言 |
+| `replyPrefix` | 每条回复开头的前缀 |
+| `selfie.enabled` | 是否开启自拍功能（需配置 `FAL_KEY`） |
+| `selfie.referenceImageUrl` | 自拍参考图片 URL（开启自拍时必填） |
+
+**改完重启 Bot 即生效，无需改代码。**
 
 <img src="docs\images\IMG_2552.jpg" style="zoom:50%;float:left" />
 
@@ -399,14 +430,31 @@ ALLOWED_TOOLS=Read,Glob,Grep,Write,Edit,Bash
 2. 发送 `/start`
 3. 发任意消息测试对话
 
-### 2. Clawra 自拍
+### 2. 多虚拟人
 
-向 Bot 发：「发张咖啡馆自拍给我」，Bot 会调用 fal.ai 生成图片并通过 `sendPhoto` 发送。
+```
+# 找特定虚拟人
+阿瓜 你今天在干嘛
+海贼王 推荐一部电影
 
-### 3. 运行单元测试
+# 查看所有虚拟人
+/personas
+
+# 切换默认
+/default 海贼王
+```
+
+### 3. 虚拟人自拍
+
+开启 `selfie.enabled` 并配置 `FAL_KEY` 后，向虚拟人发：「发张咖啡馆自拍给我」，Bot 会调用 fal.ai 生成图片并发送。
+
+### 4. 运行单元测试
 
 ```bash
 npm test
+
+# 快速测试多虚拟人路由逻辑（不需要启动 bot）
+node test-personas.mjs
 ```
 
 ---
