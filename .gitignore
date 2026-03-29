@@ -4,5 +4,4 @@ dist/
 *.log
 workspace/
 .idea/
-article.md
 .wechat-token
