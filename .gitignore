@@ -5,3 +5,4 @@ dist/
 workspace/
 .idea/
 article.md
+.wechat-token

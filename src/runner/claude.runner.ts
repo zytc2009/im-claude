@@ -1,8 +1,7 @@
-import path from "path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { SessionManager } from "./session.manager.js";
 import type { PermissionManager } from "../permissions/permission.manager.js";
-import { loadProfile, buildSystemPrompt } from "../clawra/profile.js";
+import { getPersona, buildSystemPrompt } from "../clawra/profile.js";
 
 export class ClaudeRunner {
   constructor(
@@ -10,32 +9,28 @@ export class ClaudeRunner {
     private readonly permissions: PermissionManager,
   ) {}
 
-  async run(userId: string, userMessage: string): Promise<string> {
-    const session = this.sessions.getOrCreate(userId);
+  async run(userId: string, userMessage: string, personaName: string): Promise<string> {
+    const session = this.sessions.getOrCreate(userId, personaName);
     const abortController = new AbortController();
 
-    const profilePath = path.resolve(process.cwd(), "config/clawra-profile.json");
-    const profile = loadProfile(profilePath);
-    const CLAWRA_PROMPT = buildSystemPrompt(profile);
+    const profile = getPersona(personaName);
+    const systemPrompt = buildSystemPrompt(profile);
 
     const q = query({
       prompt: userMessage,
       options: {
         abortController,
         maxTurns: 10,
-        // 工具白名单
         allowedTools: this.permissions.getAllowedTools(),
         cwd: this.permissions.getWorkingDir(),
-        // 注入 Clawra 人设和自拍能力
-        agent: "clawra",
+        agent: personaName,
         agents: {
-          clawra: {
-            description: "Clawra - AI girlfriend with selfie capabilities",
-            prompt: CLAWRA_PROMPT,
+          [personaName]: {
+            description: `${profile.name} - virtual persona`,
+            prompt: systemPrompt,
             tools: this.permissions.getAllowedTools(),
           },
         },
-        // 有 sdkSessionId 则续接上次对话，否则开新会话
         ...(session.sdkSessionId ? { resume: session.sdkSessionId } : {}),
       },
     });
@@ -46,23 +41,18 @@ export class ClaudeRunner {
       switch (event.type) {
         case "result":
           if (event.subtype === "success") {
-            // result 字段是对话的最终文本摘要
             finalText = event.result;
-            // 保存 session_id 供下次续接
-            this.sessions.setSdkSessionId(userId, event.session_id);
+            this.sessions.setSdkSessionId(userId, personaName, event.session_id);
           } else {
-            // 执行出错
             const err = event as { errors?: string[] };
             throw new Error(err.errors?.join("; ") ?? "执行失败");
           }
           break;
 
         case "assistant":
-          // 逐步收集 assistant 文本（result 里也有，但这里可做流式转发）
           if (!event.error) {
             for (const block of event.message.content) {
               if (block.type === "text" && !finalText) {
-                // 只在 result 未到达时用 assistant 事件兜底
                 finalText = block.text;
               }
             }
@@ -74,12 +64,15 @@ export class ClaudeRunner {
     return finalText.trim() || "（无响应）";
   }
 
-  getReplyPrefix(): string {
-    const profilePath = path.resolve(process.cwd(), "config/clawra-profile.json");
-    return loadProfile(profilePath).replyPrefix;
+  getReplyPrefix(personaName: string): string {
+    return getPersona(personaName).replyPrefix;
   }
 
-  clearSession(userId: string): void {
-    this.sessions.clear(userId);
+  clearSession(userId: string, personaName: string): void {
+    this.sessions.clear(userId, personaName);
+  }
+
+  clearAllSessions(userId: string): void {
+    this.sessions.clearAll(userId);
   }
 }
