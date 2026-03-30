@@ -3,11 +3,20 @@ import type { ClaudeRunner } from "../runner/claude.runner.js";
 import type { PermissionManager } from "../permissions/permission.manager.js";
 import { logMessage } from "../services/message.logger.js";
 
-/** 正在处理中的 key（userId:personaName），防止重复提交 */
-const PROCESSING = new Set<string>();
+interface QueueItem {
+  adapter: IMAdapter;
+  chatId: string;
+  userId: string;
+  text: string;
+  personaName: string;
+}
 
 export class MessageRouter {
   private readonly adapters: IMAdapter[] = [];
+  /** 每个 userId:persona 的待处理队列 */
+  private readonly queues = new Map<string, QueueItem[]>();
+  /** 当前正在处理的 key */
+  private readonly processing = new Set<string>();
 
   constructor(
     private readonly runner: ClaudeRunner,
@@ -115,12 +124,26 @@ export class MessageRouter {
     });
 
     const processingKey = `${msg.userId}:${personaName}`;
-    if (PROCESSING.has(processingKey)) return;
+    const item: QueueItem = { adapter, chatId: msg.chatId, userId: msg.userId, text: messageText, personaName };
 
-    PROCESSING.add(processingKey);
+    if (this.processing.has(processingKey)) {
+      // 正在处理中，加入队列等待
+      const queue = this.queues.get(processingKey) ?? [];
+      queue.push(item);
+      this.queues.set(processingKey, queue);
+      console.log(`[Router][${personaName}] 消息已入队（队列长度: ${queue.length}）`);
+      return;
+    }
+
+    void this.processItem(item, processingKey);
+  }
+
+  private async processItem(item: QueueItem, processingKey: string): Promise<void> {
+    const { adapter, chatId, userId, text, personaName } = item;
+    this.processing.add(processingKey);
     const heartbeat = setInterval(() => { /* keep-alive */ }, 25_000);
     try {
-      const response = await this.runner.run(msg.userId, messageText, personaName);
+      const response = await this.runner.run(userId, text, personaName);
       console.log(`[Router][${personaName}] Claude 响应: ${JSON.stringify(response)}`);
 
       const prefix = this.runner.getReplyPrefix(personaName);
@@ -141,17 +164,25 @@ export class MessageRouter {
           .trim();
         const prefixedCaption = caption ? `${prefix}${caption}` : caption;
         const fallbackText = prefixedCaption ? `${prefixedCaption}\n${rawUrl}` : rawUrl;
-        await adapter.sendMessage({ chatId: msg.chatId, text: prefixedCaption, mediaUrl: imageUrl, fallbackText });
+        await adapter.sendMessage({ chatId, text: prefixedCaption, mediaUrl: imageUrl, fallbackText });
       } else {
-        await adapter.sendMessage({ chatId: msg.chatId, text: `${prefix}${response}` });
+        await adapter.sendMessage({ chatId, text: `${prefix}${response}` });
       }
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
-      console.error(`[Router][${personaName}] Error for user ${msg.userId}:`, detail);
-      await adapter.sendMessage({ chatId: msg.chatId, text: `❌ 出错了：${detail}` });
+      console.error(`[Router][${personaName}] Error for user ${userId}:`, detail, err);
+      await adapter.sendMessage({ chatId, text: `❌ 出错了：${detail}` });
     } finally {
       clearInterval(heartbeat);
-      PROCESSING.delete(processingKey);
+      this.processing.delete(processingKey);
+
+      // 处理队列中的下一条消息
+      const queue = this.queues.get(processingKey);
+      if (queue && queue.length > 0) {
+        const next = queue.shift()!;
+        if (queue.length === 0) this.queues.delete(processingKey);
+        void this.processItem(next, processingKey);
+      }
     }
   }
 

@@ -45,7 +45,7 @@ export class ClaudeRunner {
             this.sessions.setSdkSessionId(userId, personaName, event.session_id);
           } else {
             const err = event as { errors?: string[] };
-            throw new Error(err.errors?.join("; ") ?? "执行失败");
+            throw new Error(err.errors?.join("; ") || "执行失败");
           }
           break;
 
