@@ -17,6 +17,7 @@ const PersonaProfileSchema = z.object({
   speakingStyle: z.string().min(1),
   language: z.string().min(1),
   replyPrefix: z.string().optional(),
+  contentPrefix: z.string().optional(),
   selfie: SelfieConfigSchema.optional(),
 });
 
@@ -50,6 +51,7 @@ export function loadPersonasConfig(configPath: string): PersonasConfig {
       speakingStyle: p.speakingStyle,
       language: p.language,
       replyPrefix: p.replyPrefix ?? `${p.name}: `,
+      contentPrefix: p.contentPrefix ?? "",
       selfie: Object.freeze(p.selfie ?? { enabled: false }),
     };
     registry.set(p.name.toLowerCase(), profile);

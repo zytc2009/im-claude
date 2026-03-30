@@ -9,6 +9,7 @@
       "speakingStyle": "口语化自然简短，经常用波浪号~表达语气，喜欢用颜文字，说话不超过两句，像发微信一样",
       "language": "中文",
       "replyPrefix": "阿瓜: ",
+      "contentPrefix": "亲爱的，",
       "selfie": {
         "enabled": true,
         "referenceImageUrl": "https://raw.githubusercontent.com/zytc2009/im-claude/main/src/clawra/clawra.png"
@@ -23,6 +24,7 @@
       "speakingStyle": "说话豪爽接地气，爱开玩笑，偶尔用网络梗，语气充满活力，不超过两三句，像兄弟聊天一样随意",
       "language": "中文",
       "replyPrefix": "海贼王: ",
+      "contentPrefix": "兄弟，",
       "selfie": {
         "enabled": false
       }

@@ -147,6 +147,7 @@ export class MessageRouter {
       console.log(`[Router][${personaName}] Claude 响应: ${JSON.stringify(response)}`);
 
       const prefix = this.runner.getReplyPrefix(personaName);
+      const contentPrefix = this.runner.getContentPrefix(personaName);
 
       const imageUrlMatch =
         response.match(/https?:\/\/\S+\.(?:jpg|jpeg|png|webp|gif)(?:\?\S*)?/i) ??
@@ -166,7 +167,7 @@ export class MessageRouter {
         const fallbackText = prefixedCaption ? `${prefixedCaption}\n${rawUrl}` : rawUrl;
         await adapter.sendMessage({ chatId, text: prefixedCaption, mediaUrl: imageUrl, fallbackText });
       } else {
-        await adapter.sendMessage({ chatId, text: `${prefix}${response}` });
+        await adapter.sendMessage({ chatId, text: `${prefix}${contentPrefix}${response}` });
       }
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);

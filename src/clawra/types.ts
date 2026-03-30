@@ -12,6 +12,8 @@ export interface PersonaProfile {
   readonly language: string;
   /** 回复时带在开头的前缀，默认为 "<name>: " */
   readonly replyPrefix: string;
+  /** 回复内容开头的称呼前缀，如 "亲爱的，" */
+  readonly contentPrefix: string;
   readonly selfie: SelfieConfig;
 }
 

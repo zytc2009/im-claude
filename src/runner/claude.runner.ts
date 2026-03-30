@@ -68,6 +68,10 @@ export class ClaudeRunner {
     return getPersona(personaName).replyPrefix;
   }
 
+  getContentPrefix(personaName: string): string {
+    return getPersona(personaName).contentPrefix;
+  }
+
   clearSession(userId: string, personaName: string): void {
     this.sessions.clear(userId, personaName);
   }
