@@ -17,6 +17,8 @@ export class MessageRouter {
   private readonly queues = new Map<string, QueueItem[]>();
   /** 当前正在处理的 key */
   private readonly processing = new Set<string>();
+  /** 内容去重：userId+text → 最近处理时间戳，防止同一消息在 120s 内被处理两次 */
+  private readonly recentMessages = new Map<string, number>();
 
   constructor(
     private readonly runner: ClaudeRunner,
@@ -61,6 +63,25 @@ export class MessageRouter {
   }
 
   private async handle(adapter: IMAdapter, msg: IncomingMessage): Promise<void> {
+    console.log(`[Router] handle() called platform=${adapter.platform} userId=${msg.userId} text="${msg.text.slice(0, 80)}" ts=${new Date().toISOString()}`);
+
+    // 内容去重：同一用户 120s 内相同文本只处理一次（防止 adapter 层竞态导致重复）
+    const contentKey = `${msg.userId}:${msg.text}`;
+    const now = Date.now();
+    const lastSeen = this.recentMessages.get(contentKey);
+    if (lastSeen !== undefined && now - lastSeen < 120_000) {
+      console.log(`[Router] 跳过重复消息（${now - lastSeen}ms 内已处理）text="${msg.text.slice(0, 40)}"`);
+      return;
+    }
+    this.recentMessages.set(contentKey, now);
+    // 清理超过 120s 的旧记录，防止内存泄漏
+    if (this.recentMessages.size > 500) {
+      const cutoff = now - 120_000;
+      for (const [k, t] of this.recentMessages) {
+        if (t < cutoff) this.recentMessages.delete(k);
+      }
+    }
+
     if (!this.permissions.isUserAllowed(msg.userId)) {
       await adapter.sendMessage({ chatId: msg.chatId, text: "❌ 无访问权限" });
       return;
@@ -140,6 +161,7 @@ export class MessageRouter {
 
   private async processItem(item: QueueItem, processingKey: string): Promise<void> {
     const { adapter, chatId, userId, text, personaName } = item;
+    console.log(`[Router] processItem START key=${processingKey} text="${text.slice(0, 80)}" queueSize=${this.queues.get(processingKey)?.length ?? 0}`);
     this.processing.add(processingKey);
     const heartbeat = setInterval(() => { /* keep-alive */ }, 25_000);
     try {

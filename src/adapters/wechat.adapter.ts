@@ -12,6 +12,7 @@ const CHANNEL_VERSION = "1.0.2";
 
 interface MessageItem {
   type: number;           // 1=文字, 2=图片, 3=语音, 4=文件, 5=视频
+  create_time_ms?: number;
   text_item?: { text: string };
   image_item?: { media_id: string };
   voice_item?: { text?: string };
@@ -55,6 +56,10 @@ export class WeChatAdapter implements IMAdapter {
 
   /** userId → 最新 context_token，用于回复消息 */
   private contextTokens = new Map<string, string>();
+  /** 已处理过的消息key（userId:create_time_ms:type），防止重复处理 */
+  private seenMessageKeys = new Set<string>();
+  /** 动态识别的 Bot ID (来自收到的消息的 to_user_id) */
+  private botId: string | null = null;
 
   private get http(): AxiosInstance {
     return axios.create({
@@ -218,10 +223,43 @@ export class WeChatAdapter implements IMAdapter {
   }
 
   private async handleMessage(msg: WeChatMessage): Promise<void> {
+    // 识别 Bot ID
+    if (!this.botId && msg.to_user_id) {
+      this.botId = msg.to_user_id;
+      console.log(`[WeChat] 识别到 Bot ID: ${this.botId}`);
+    }
+
+    // 过滤自身发出的消息，防止递归回复循环
+    if (this.botId && msg.from_user_id === this.botId) {
+      // console.log(`[WeChat] 跳过自身消息 from=${msg.from_user_id}`);
+      return;
+    }
+
     console.log(`[WeChat] 收到消息: type=${msg.message_type} from=${msg.from_user_id} context_token=${msg.context_token} items=${JSON.stringify(msg.item_list)}`);
     if (!this.handler) return;
     // 只处理用户发来的消息（message_type=1）
     if (msg.message_type !== 1) return;
+
+    // 去重：用 userId+create_time_ms+type 作为稳定key，context_token 每次投递可能不同
+    const firstItem = msg.item_list?.[0];
+    const msgKey = firstItem?.create_time_ms
+      ? `${msg.from_user_id}:${firstItem.create_time_ms}:${firstItem.type}`
+      : null;
+    if (msgKey) {
+      if (this.seenMessageKeys.has(msgKey)) {
+        console.log(`[WeChat] 跳过重复消息 key=${msgKey} setSize=${this.seenMessageKeys.size}`);
+        return;
+      }
+      this.seenMessageKeys.add(msgKey);
+      console.log(`[WeChat][dedup] 新消息 key=${msgKey} setSize=${this.seenMessageKeys.size}`);
+    } else {
+      console.log(`[WeChat][dedup] 无 create_time_ms，fallback 到 context_token 去重`);
+      if (msg.context_token && this.seenMessageKeys.has(`ctx:${msg.context_token}`)) {
+        console.log(`[WeChat] 跳过重复消息（context_token fallback）`);
+        return;
+      }
+      if (msg.context_token) this.seenMessageKeys.add(`ctx:${msg.context_token}`);
+    }
 
     // 保存 context_token
     this.contextTokens.set(msg.from_user_id!, msg.context_token!);

@@ -10,6 +10,8 @@ export class ClaudeRunner {
   ) {}
 
   async run(userId: string, userMessage: string, personaName: string): Promise<string> {
+    const callId = Math.random().toString(36).slice(2, 8);
+    console.log(`[Runner][${callId}] run() 开始 userId=${userId} persona=${personaName} text="${userMessage.slice(0, 80)}"`);
     const session = this.sessions.getOrCreate(userId, personaName);
     const abortController = new AbortController();
 
@@ -61,7 +63,9 @@ export class ClaudeRunner {
       }
     }
 
-    return finalText.trim() || "（无响应）";
+    const result = finalText.trim() || "（无响应）";
+    console.log(`[Runner][${callId}] run() 完成 persona=${personaName} result="${result.slice(0, 100)}"`);
+    return result;
   }
 
   getReplyPrefix(personaName: string): string {
