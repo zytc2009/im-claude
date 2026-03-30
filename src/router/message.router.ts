@@ -1,6 +1,7 @@
 import type { IMAdapter, IncomingMessage } from "../adapters/base.adapter.js";
 import type { ClaudeRunner } from "../runner/claude.runner.js";
 import type { PermissionManager } from "../permissions/permission.manager.js";
+import { logMessage } from "../services/message.logger.js";
 
 /** 正在处理中的 key（userId:personaName），防止重复提交 */
 const PROCESSING = new Set<string>();
@@ -104,6 +105,14 @@ export class MessageRouter {
 
     const { personaName, text: messageText } = this.parsePersona(msg.text);
     if (!messageText) return;
+
+    logMessage({
+      timestamp: new Date().toISOString(),
+      source: adapter.platform,
+      userId: msg.userId,
+      personaName,
+      text: messageText,
+    });
 
     const processingKey = `${msg.userId}:${personaName}`;
     if (PROCESSING.has(processingKey)) return;
