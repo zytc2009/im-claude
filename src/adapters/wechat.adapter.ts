@@ -56,8 +56,9 @@ export class WeChatAdapter implements IMAdapter {
 
   /** userId → 最新 context_token，用于回复消息 */
   private contextTokens = new Map<string, string>();
-  /** 已处理过的消息key（userId:create_time_ms:type），防止重复处理 */
-  private seenMessageKeys = new Set<string>();
+  /** 已处理过的消息key → 时间戳，防止重复处理（60秒窗口） */
+  private seenMessageKeys = new Map<string, number>();
+  private readonly DEDUP_WINDOW_MS = 60_000;
   /** 动态识别的 Bot ID (来自收到的消息的 to_user_id) */
   private botId: string | null = null;
 
@@ -211,8 +212,18 @@ export class WeChatAdapter implements IMAdapter {
         // 更新游标
         if (get_updates_buf) this.updatesBuf = get_updates_buf;
 
+        // 顺序处理消息，避免竞态
+        const msgCount = (msgs ?? []).length;
+        if (msgCount > 0) {
+          console.log(`[FLOW][WeChat] ====== 本轮收到 ${msgCount} 条消息 ======`);
+          for (const msg of msgs ?? []) {
+            const preview = msg.item_list?.[0]?.text_item?.text?.slice(0, 50) || '[非文本]';
+            console.log(`[FLOW][WeChat] 原始消息 from=${msg.from_user_id} type=${msg.message_type} preview="${preview}"`);
+          }
+          console.log(`[FLOW][WeChat] ====== 开始逐条处理 ======`);
+        }
         for (const msg of msgs ?? []) {
-          void this.handleMessage(msg);
+          await this.handleMessage(msg);
         }
       } catch (err) {
         if (!this.polling) break;
@@ -240,25 +251,21 @@ export class WeChatAdapter implements IMAdapter {
     // 只处理用户发来的消息（message_type=1）
     if (msg.message_type !== 1) return;
 
-    // 去重：用 userId+create_time_ms+type 作为稳定key，context_token 每次投递可能不同
-    const firstItem = msg.item_list?.[0];
-    const msgKey = firstItem?.create_time_ms
-      ? `${msg.from_user_id}:${firstItem.create_time_ms}:${firstItem.type}`
-      : null;
-    if (msgKey) {
-      if (this.seenMessageKeys.has(msgKey)) {
-        console.log(`[WeChat] 跳过重复消息 key=${msgKey} setSize=${this.seenMessageKeys.size}`);
-        return;
-      }
-      this.seenMessageKeys.add(msgKey);
-      console.log(`[WeChat][dedup] 新消息 key=${msgKey} setSize=${this.seenMessageKeys.size}`);
-    } else {
-      console.log(`[WeChat][dedup] 无 create_time_ms，fallback 到 context_token 去重`);
-      if (msg.context_token && this.seenMessageKeys.has(`ctx:${msg.context_token}`)) {
-        console.log(`[WeChat] 跳过重复消息（context_token fallback）`);
-        return;
-      }
-      if (msg.context_token) this.seenMessageKeys.add(`ctx:${msg.context_token}`);
+    // 去重：生成稳定的去重 key
+    const msgKey = this.generateStableKey(msg);
+    const textPreview = msg.item_list?.[0]?.text_item?.text?.slice(0, 20) || '非文本';
+    const now = Date.now();
+    const lastSeen = this.seenMessageKeys.get(msgKey);
+    if (lastSeen && now - lastSeen < this.DEDUP_WINDOW_MS) {
+      console.log(`[FLOW][WeChat] 重复跳过 key=${msgKey} text="${textPreview}"`);
+      return;
+    }
+    this.seenMessageKeys.set(msgKey, now);
+    console.log(`[FLOW][WeChat] 新消息 key=${msgKey} text="${textPreview}"`);
+
+    // 定期清理过期的 key（每100条清理一次）
+    if (this.seenMessageKeys.size % 100 === 0) {
+      this.cleanupSeenKeys();
     }
 
     // 保存 context_token
@@ -490,6 +497,74 @@ export class WeChatAdapter implements IMAdapter {
 
   private deleteToken(): void {
     try { fs.unlinkSync(TOKEN_FILE); } catch { /* 忽略 */ }
+  }
+
+  /**
+   * 生成稳定的去重 key
+   * 优先使用 create_time_ms，没有则根据消息类型使用不同策略
+   */
+  private generateStableKey(msg: WeChatMessage): string {
+    const userId = msg.from_user_id ?? "unknown";
+    const item = msg.item_list?.[0];
+    if (!item) return `${userId}:unknown`;
+
+    // 优先使用 create_time_ms（最可靠）
+    if (item.create_time_ms) {
+      return `${userId}:${item.create_time_ms}:${item.type}`;
+    }
+
+    // 文本消息：使用内容 hash + 10秒时间窗口
+    if (item.type === 1 && item.text_item?.text) {
+      const timeWindow = Math.floor(Date.now() / 10_000);
+      return `${userId}:text:${this.simpleHash(item.text_item.text)}:${timeWindow}`;
+    }
+
+    // 图片消息：使用 media_id（稳定）
+    if (item.type === 2) {
+      const mediaId = (item.image_item as { media_id?: string }).media_id ?? "unknown";
+      return `${userId}:img:${mediaId}`;
+    }
+
+    // 语音消息：使用识别文本 hash + 10秒时间窗口
+    if (item.type === 3 && item.voice_item?.text) {
+      const timeWindow = Math.floor(Date.now() / 10_000);
+      return `${userId}:voice:${this.simpleHash(item.voice_item.text)}:${timeWindow}`;
+    }
+
+    // Fallback：时间窗口（粗粒度去重）
+    const timeWindow = Math.floor(Date.now() / 5_000);
+    return `${userId}:fallback:${item.type}:${timeWindow}`;
+  }
+
+  /**
+   * 简单的字符串 hash（非加密用途）
+   */
+  private simpleHash(str: string): string {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // 转为 32bit 整数
+    }
+    return Math.abs(hash).toString(36).slice(0, 8);
+  }
+
+  /**
+   * 清理过期的 seenMessageKeys，防止内存泄漏
+   */
+  private cleanupSeenKeys(): void {
+    const now = Date.now();
+    const cutoff = now - this.DEDUP_WINDOW_MS;
+    let cleaned = 0;
+    for (const [key, timestamp] of this.seenMessageKeys) {
+      if (timestamp < cutoff) {
+        this.seenMessageKeys.delete(key);
+        cleaned++;
+      }
+    }
+    if (cleaned > 0) {
+      console.log(`[WeChat][dedup] 清理了 ${cleaned} 条过期记录，剩余 ${this.seenMessageKeys.size}`);
+    }
   }
 }
 

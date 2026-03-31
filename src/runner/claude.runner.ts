@@ -10,8 +10,12 @@ export class ClaudeRunner {
   ) {}
 
   async run(userId: string, userMessage: string, personaName: string): Promise<string> {
-    const callId = Math.random().toString(36).slice(2, 8);
-    console.log(`[Runner][${callId}] run() 开始 userId=${userId} persona=${personaName} text="${userMessage.slice(0, 80)}"`);
+    console.log(`[FLOW][Runner] ====== 开始处理 ======`);
+    console.log(`[FLOW][Runner] userId=${userId}`);
+    console.log(`[FLOW][Runner] personaName=${personaName}`);
+    console.log(`[FLOW][Runner] fullMessage="${userMessage}"`);
+    const msgPreview = userMessage.slice(0, 30);
+    console.log(`[FLOW][Runner] preview="${msgPreview}"`);
     const session = this.sessions.getOrCreate(userId, personaName);
     const abortController = new AbortController();
 
@@ -38,13 +42,21 @@ export class ClaudeRunner {
     });
 
     let finalText = "";
+    let eventCount = { result: 0, assistant: 0, other: 0 };
 
     for await (const event of q) {
+      const eventType = event.type as string;
+      if (eventType === "result") eventCount.result++;
+      else if (eventType === "assistant") eventCount.assistant++;
+      else eventCount.other++;
+
       switch (event.type) {
         case "result":
           if (event.subtype === "success") {
             finalText = event.result;
             this.sessions.setSdkSessionId(userId, personaName, event.session_id);
+            const replyPreview = finalText.slice(0, 40).replace(/\n/g, ' ');
+            console.log(`[FLOW][Runner] 生成回复 #${eventCount.result} user=${userId} reply="${replyPreview}..."`);
           } else {
             const err = event as { errors?: string[] };
             throw new Error(err.errors?.join("; ") || "执行失败");
@@ -56,15 +68,16 @@ export class ClaudeRunner {
             for (const block of event.message.content) {
               if (block.type === "text" && !finalText) {
                 finalText = block.text;
+                console.log(`[FLOW][Runner] 从assistant提取文本 #${eventCount.assistant} user=${userId}`);
               }
             }
           }
           break;
       }
     }
+    console.log(`[FLOW][Runner] 事件统计 user=${userId} result=${eventCount.result} assistant=${eventCount.assistant} other=${eventCount.other}`);
 
     const result = finalText.trim() || "（无响应）";
-    console.log(`[Runner][${callId}] run() 完成 persona=${personaName} result="${result.slice(0, 100)}"`);
     return result;
   }
 
