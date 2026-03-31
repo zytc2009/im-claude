@@ -212,16 +212,6 @@ export class WeChatAdapter implements IMAdapter {
         // 更新游标
         if (get_updates_buf) this.updatesBuf = get_updates_buf;
 
-        // 顺序处理消息，避免竞态
-        const msgCount = (msgs ?? []).length;
-        if (msgCount > 0) {
-          console.log(`[FLOW][WeChat] ====== 本轮收到 ${msgCount} 条消息 ======`);
-          for (const msg of msgs ?? []) {
-            const preview = msg.item_list?.[0]?.text_item?.text?.slice(0, 50) || '[非文本]';
-            console.log(`[FLOW][WeChat] 原始消息 from=${msg.from_user_id} type=${msg.message_type} preview="${preview}"`);
-          }
-          console.log(`[FLOW][WeChat] ====== 开始逐条处理 ======`);
-        }
         for (const msg of msgs ?? []) {
           await this.handleMessage(msg);
         }

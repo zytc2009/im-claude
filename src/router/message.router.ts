@@ -63,26 +63,17 @@ export class MessageRouter {
   }
 
   private async handle(adapter: IMAdapter, msg: IncomingMessage): Promise<void> {
-    const textPreview = msg.text.slice(0, 50);
-    console.log(`[FLOW][Router] ====== 收到消息 ======`);
-    console.log(`[FLOW][Router] userId=${msg.userId}`);
-    console.log(`[FLOW][Router] chatId=${msg.chatId}`);
-    console.log(`[FLOW][Router] platform=${msg.platform}`);
-    console.log(`[FLOW][Router] text="${textPreview}"`);
-    console.log(`[FLOW][Router] fullText="${msg.text}"`);
-    console.log(`[FLOW][Router] ====== 开始处理 ======`);
+    const textPreview = msg.text.slice(0, 30);
 
     // 内容去重
     const contentKey = `${msg.userId}:${msg.text}`;
     const now = Date.now();
     const lastSeen = this.recentMessages.get(contentKey);
     if (lastSeen !== undefined && now - lastSeen < 120_000) {
-      console.log(`[FLOW][Router] 重复跳过（120秒内重复）user=${msg.userId} text="${textPreview}"`);
-      console.log(`[FLOW][Router] 上次处理时间=${new Date(lastSeen).toISOString()}`);
+      console.log(`[FLOW][Router] 重复跳过 user=${msg.userId} text="${textPreview}"`);
       return;
     }
     this.recentMessages.set(contentKey, now);
-    console.log(`[FLOW][Router] 通过去重检查，继续处理 user=${msg.userId}`);
     // 清理超过 120s 的旧记录，防止内存泄漏
     if (this.recentMessages.size > 500) {
       const cutoff = now - 120_000;
@@ -155,25 +146,20 @@ export class MessageRouter {
 
     const processingKey = `${msg.userId}:${personaName}`;
     const item: QueueItem = { adapter, chatId: msg.chatId, userId: msg.userId, text: messageText, personaName };
-    console.log(`[FLOW][Router] processingKey=${processingKey}`);
-    console.log(`[FLOW][Router] 当前processing状态=${this.processing.has(processingKey) ? '正在处理中' : '空闲'}`);
 
     if (this.processing.has(processingKey)) {
       // 正在处理中，检查队列中是否已有相同内容
       const queue = this.queues.get(processingKey) ?? [];
-      console.log(`[FLOW][Router] 当前队列长度=${queue.length}`);
       const isDuplicateInQueue = queue.some(q =>
         q.text === messageText && q.adapter.platform === adapter.platform
       );
       if (isDuplicateInQueue) {
         console.log(`[Router][${personaName}] 队列中已存在相同消息，丢弃`);
-        console.log(`[FLOW][Router] 丢弃的消息="${messageText.slice(0, 50)}"`);
         return;
       }
       queue.push(item);
       this.queues.set(processingKey, queue);
       console.log(`[Router][${personaName}] 消息已入队（队列长度: ${queue.length}）`);
-      console.log(`[FLOW][Router] 入队消息="${messageText.slice(0, 50)}"`);
       return;
     }
 
@@ -182,16 +168,12 @@ export class MessageRouter {
 
   private async processItem(item: QueueItem, processingKey: string): Promise<void> {
     const { adapter, chatId, userId, text, personaName } = item;
-    console.log(`[FLOW][Router] ====== processItem ======`);
-    console.log(`[FLOW][Router] 调用Runner userId=${userId}`);
-    console.log(`[FLOW][Router] personaName=${personaName}`);
-    console.log(`[FLOW][Router] text="${text}"`);
+    console.log(`[FLOW][Router] 调用Runner user=${userId} text="${text.slice(0, 30)}"`);
     this.processing.add(processingKey);
     try {
       const response = await this.runner.run(userId, text, personaName);
       const replyPreview = response.slice(0, 40).replace(/\n/g, ' ');
-      console.log(`[FLOW][Router] 收到回复 user=${userId}`);
-      console.log(`[FLOW][Router] reply="${response}"`);
+      console.log(`[FLOW][Router] 收到回复 user=${userId} reply="${replyPreview}..."`);
 
       const prefix = this.runner.getReplyPrefix(personaName);
       const contentPrefix = this.runner.getContentPrefix(personaName);
@@ -216,8 +198,7 @@ export class MessageRouter {
         await adapter.sendMessage({ chatId, text: prefixedCaption, mediaUrl: imageUrl, fallbackText });
       } else {
         const outPreview = (prefix + contentPrefix + response).slice(0, 40).replace(/\n/g, ' ');
-        console.log(`[FLOW][Router] 发送文字回复 user=${userId}`);
-      console.log(`[FLOW][Router] 发送内容="${prefix}${contentPrefix}${response}"`);
+        console.log(`[FLOW][Router] 发送文字回复 user=${userId} out="${outPreview}..."`);
         await adapter.sendMessage({ chatId, text: `${prefix}${contentPrefix}${response}` });
       }
     } catch (err) {
@@ -226,18 +207,13 @@ export class MessageRouter {
       await adapter.sendMessage({ chatId, text: `❌ 出错了：${detail}` });
     } finally {
       this.processing.delete(processingKey);
-      console.log(`[FLOW][Router] processingKey=${processingKey} 已释放`);
 
       // 处理队列中的下一条消息
       const queue = this.queues.get(processingKey);
       if (queue && queue.length > 0) {
-        console.log(`[FLOW][Router] 队列中还有 ${queue.length} 条消息，处理下一条`);
         const next = queue.shift()!;
-        console.log(`[FLOW][Router] 取出队列消息: "${next.text.slice(0, 50)}"`);
         if (queue.length === 0) this.queues.delete(processingKey);
         void this.processItem(next, processingKey);
-      } else {
-        console.log(`[FLOW][Router] 队列为空，processingKey=${processingKey}`);
       }
     }
   }
