@@ -1,5 +1,6 @@
 import type { IMAdapter, IncomingMessage } from "../adapters/base.adapter.js";
 import type { ClaudeRunner } from "../runner/claude.runner.js";
+import { isAuthenticationError } from "../runner/claude.runner.js";
 import type { PermissionManager } from "../permissions/permission.manager.js";
 import { logMessage } from "../services/message.logger.js";
 
@@ -202,6 +203,13 @@ export class MessageRouter {
         await adapter.sendMessage({ chatId, text: `${prefix}${contentPrefix}${response}` });
       }
     } catch (err) {
+      const errDetail = err instanceof Error ? err.message : String(err);
+      console.error(`[FLOW][Router] 捕获错误: ${errDetail.slice(0, 200)}`);
+      // 认证错误（如第三方模型key不匹配）：只打日志，不给用户发错误消息
+      if (isAuthenticationError(err)) {
+        console.warn(`[FLOW][Router] 认证错误，跳过回复: ${err.message.slice(0, 100)}`);
+        return;
+      }
       const detail = err instanceof Error ? err.message : String(err);
       console.error(`[FLOW][Router] 处理错误 user=${userId}: ${detail}`);
       await adapter.sendMessage({ chatId, text: `❌ 出错了：${detail}` });
